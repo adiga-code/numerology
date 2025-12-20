@@ -1,1 +1,1 @@
-from .commands import CommandHandlers
+"""Handlers package."""
