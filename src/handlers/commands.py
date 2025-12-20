@@ -1,29 +1,138 @@
+"""Обработчики команд бота."""
+import logging
 from aiogram import Router
 from aiogram.types import Message
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class CommandHandlers:
-    def __init__(self):
-        self.router = Router()
-        self.router.message(Command('start'))(self.start_handler)
-        self.router.message(Command('help'))(self.help_handler)
-    
-    async def start_handler(self, message: Message):
-        """Обработчик команды /start."""
-        await message.answer('Добро пожаловать в бота по нумерологии!')
+from database.models import User
+from utils.states import OrderFlow
 
-    async def help_handler(self, message: Message):
-        """Обработчик команды /help."""
-        await message.answer('Это бот, который поможет вам с нумерологией. Используйте /start для начала.')
+logger = logging.getLogger(__name__)
 
-    async def new_order_handler(self, message: Message):
-        """Обработчик новой заявки."""
-        await message.answer('Ваша заявка принята!')
-    
-    async def get_history_handler(self, message: Message):
-        """Обработчик получения истории заявок."""
-        await message.answer('Вот ваша история заявок.')
+router = Router()
 
-    async def support_handler(self, message: Message):
-        """Обработчик поддержки пользователей."""
-        await message.answer('Свяжитесь с нашей поддержкой по адресу')
+
+@router.message(CommandStart())
+async def start_handler(message: Message, state: FSMContext, session: AsyncSession):
+    """
+    Обработчик команды /start.
+
+    Args:
+        message: Сообщение от пользователя
+        state: FSM контекст
+        session: Сессия БД
+    """
+    await state.clear()
+
+    # Получаем или создаём пользователя
+    result = await session.execute(
+        select(User).where(User.telegram_id == message.from_user.id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            telegram_id=message.from_user.id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name,
+            last_name=message.from_user.last_name
+        )
+        session.add(user)
+        await session.commit()
+        logger.info(f"Создан новый пользователь: {user.telegram_id}")
+
+    await message.answer(
+        "🔮 <b>Добро пожаловать в бота по нумерологии!</b>\n\n"
+        "Я помогу вам создать персонализированный нумерологический отчёт.\n\n"
+        "Доступные команды:\n"
+        "/new - Создать новый заказ\n"
+        "/history - История заказов\n"
+        "/help - Справка\n"
+        "/support - Поддержка",
+        parse_mode="HTML"
+    )
+
+
+@router.message(Command("help"))
+async def help_handler(message: Message):
+    """Обработчик команды /help."""
+    await message.answer(
+        "📖 <b>Справка по использованию бота</b>\n\n"
+        "<b>Тарифы:</b>\n"
+        "🌟 Быстрый взгляд (500₽) - краткий анализ, 5-7 стр\n"
+        "🔍 Глубокий анализ (1500₽) - полный анализ, 15-20 стр\n"
+        "💑 Парный Оракул (2000₽) - совместимость пары, 15-25 стр\n"
+        "👨‍👩‍👧‍👦 Семейный Оракул (3000₽) - семейный анализ, 30-50 стр\n\n"
+        "<b>Команды:</b>\n"
+        "/new - Создать новый заказ\n"
+        "/history - Посмотреть историю заказов\n"
+        "/support - Связаться с поддержкой\n"
+        "/cancel - Отменить текущий заказ",
+        parse_mode="HTML"
+    )
+
+
+@router.message(Command("cancel"))
+async def cancel_handler(message: Message, state: FSMContext):
+    """Обработчик команды /cancel."""
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.answer("Нет активного заказа для отмены.")
+        return
+
+    await state.clear()
+    await message.answer("❌ Текущий заказ отменён.")
+
+
+@router.message(Command("support"))
+async def support_handler(message: Message):
+    """Обработчик команды /support."""
+    await message.answer(
+        "💬 <b>Поддержка</b>\n\n"
+        "По всем вопросам обращайтесь:\n"
+        "📧 Email: support@example.com\n"
+        "Telegram: @support",
+        parse_mode="HTML"
+    )
+
+
+@router.message(Command("history"))
+async def history_handler(message: Message, session: AsyncSession):
+    """Обработчик команды /history."""
+    from database.models import Order
+
+    result = await session.execute(
+        select(Order)
+        .join(User)
+        .where(User.telegram_id == message.from_user.id)
+        .order_by(Order.created_at.desc())
+        .limit(10)
+    )
+    orders = result.scalars().all()
+
+    if not orders:
+        await message.answer("У вас пока нет заказов.")
+        return
+
+    text = "📋 <b>Ваши последние заказы:</b>\n\n"
+    for order in orders:
+        status_emoji = {
+            "pending": "⏳",
+            "paid": "💳",
+            "processing": "⚙️",
+            "completed": "✅",
+            "failed": "❌",
+            "refunded": "↩️"
+        }.get(order.status.value, "❓")
+
+        text += (
+            f"{status_emoji} <b>Заказ #{order.order_uuid[:8]}</b>\n"
+            f"Тариф: {order.tariff.value}\n"
+            f"Статус: {order.status.value}\n"
+            f"Дата: {order.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+        )
+
+    await message.answer(text, parse_mode="HTML")

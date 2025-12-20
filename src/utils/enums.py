@@ -1,74 +1,67 @@
-
-from enum import Enum, IntEnum
+"""Перечисления для типов данных."""
+from enum import Enum
 
 
 class TariffType(str, Enum):
-    """Типы тарифов"""
-    QUICK = "quick"
-    DEEP = "deep"
-    PAIR = "pair"
-    FAMILY = "family"
+    """Типы тарифов."""
+    QUICK = "quick"  # Быстрый взгляд (500₽, 1 участник)
+    DEEP = "deep"  # Глубокий анализ (1500₽, 1 участник)
+    PAIR = "pair"  # Парный Оракул (2000₽, 2 участника)
+    FAMILY = "family"  # Семейный Оракул (3000₽, 3-5 участников)
 
 
 class StyleType(str, Enum):
-    """Стили анализа"""
-    ANALYTICAL = "analytical"
-    SHAMANIC = "shamanic"
+    """Стили отчётов."""
+    ANALYTICAL = "analytical"  # Аналитический
+    SHAMANIC = "shamanic"  # Шаманский
 
 
 class OrderStatus(str, Enum):
-    """Статусы заказа"""
-    PENDING = "pending"
-    PAID = "paid"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    REFUNDED = "refunded"
+    """Статусы заказа."""
+    PENDING = "pending"  # Ожидает оплаты
+    PAID = "paid"  # Оплачен
+    PROCESSING = "processing"  # В обработке
+    COMPLETED = "completed"  # Завершён
+    FAILED = "failed"  # Ошибка
+    REFUNDED = "refunded"  # Возврат средств
 
 
 class Currency(str, Enum):
-    """Валюты"""
+    """Валюты."""
     RUB = "RUB"
-    USD = "USD"
-    EUR = "EUR"
 
 
 class PaymentMethod(str, Enum):
-    """Методы оплаты"""
+    """Методы оплаты."""
     YOOKASSA = "yookassa"
     TELEGRAM_STARS = "telegram_stars"
 
 
 class ParticipantType(str, Enum):
-    """Типы участников заказа"""
-    MAIN = "main"
-    PARTNER = "partner"
-    FAMILY_MEMBER = "family_member"
+    """Типы участников."""
+    MAIN = "main"  # Основной заказчик
+    PARTNER = "partner"  # Партнёр
+    FAMILY_MEMBER = "family_member"  # Член семьи
+
+
+class Rating(int, Enum):
+    """Оценки отзывов."""
+    ONE = 1
+    TWO = 2
+    THREE = 3
+    FOUR = 4
+    FIVE = 5
 
 
 class AiProvider(str, Enum):
-    """Провайдеры AI"""
+    """AI провайдеры."""
     MANUS = "manus"
     GPT4 = "gpt4"
     GEMINI = "gemini"
 
 
 class AiLogStatus(str, Enum):
-    """Статусы AI логов"""
+    """Статусы AI обработки."""
     PENDING = "pending"
     SUCCESS = "success"
     FAILED = "failed"
-
-
-class Rating(IntEnum):
-    """Рейтинги отзывов"""
-    ONE_STAR = 1
-    TWO_STARS = 2
-    THREE_STARS = 3
-    FOUR_STARS = 4
-    FIVE_STARS = 5
-
-    @classmethod
-    def is_valid(cls, value: int) -> bool:
-        """Проверка валидности рейтинга"""
-        return value in [r.value for r in cls]

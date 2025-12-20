@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: numerology_db
+    environment:
+      POSTGRES_USER: numerology
+      POSTGRES_PASSWORD: numerology
+      POSTGRES_DB: numerology
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U numerology"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: numerology_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: numerology_app
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./alembic:/app/alembic
+      - ./templates:/app/templates
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    command: >
+      sh -c "
+        alembic upgrade head &&
+        python src/main.py
+      "
+
+volumes:
+  postgres_data:
+  redis_data:

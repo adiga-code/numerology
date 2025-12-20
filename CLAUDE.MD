@@ -2,36 +2,62 @@
 
 ## Project Overview
 
-This is a Telegram bot for providing numerology services. The bot handles user orders for numerological readings, processes payment, and generates personalized PDF reports based on birth data.
+Автоматизированный Telegram-бот для генерации персонализированных нумерологических отчётов с использованием AI (Manus API, GPT-4, Gemini) с интеграцией платёжных систем и CRM.
 
 ## Technology Stack
 
-- **Language**: Python 3.12+
-- **Bot Framework**: aiogram (Telegram Bot API wrapper)
-- **Database**: PostgreSQL (via asyncpg)
-- **Async Framework**: asyncio
-- **Environment Management**: python-dotenv
+- **Language**: Python 3.11+
+- **Bot Framework**: aiogram 3.x
+- **Web Server**: FastAPI (для webhook)
+- **Database**: PostgreSQL 15+
+- **Cache**: Redis 7+
+- **ORM**: SQLAlchemy 2.0 (async)
+- **Migrations**: Alembic
+- **AI Services**: Manus API, OpenAI GPT-4, Google Gemini
+- **Payments**: ЮKassa API, Telegram Stars
+- **Infrastructure**: Docker + Docker Compose
+- **PDF Generation**: WeasyPrint + Jinja2
 
 ## Project Structure
 
 ```
 numerology/
 ├── src/
-│   ├── main.py              # Application entry point
-│   ├── bot.py               # Bot initialization and setup
-│   ├── config.py            # Configuration management
+│   ├── main.py                    # Application entry point (Bot + FastAPI)
+│   ├── bot.py                     # Bot initialization
+│   ├── api.py                     # FastAPI application
+│   ├── config.py                  # Configuration
 │   ├── database/
 │   │   ├── __init__.py
-│   │   └── database.py      # Database operations and models
+│   │   ├── models.py              # SQLAlchemy models
+│   │   └── database.py            # Database connection
 │   ├── handlers/
 │   │   ├── __init__.py
-│   │   └── commands.py      # Command handlers for bot
+│   │   ├── commands.py            # Command handlers
+│   │   ├── order_flow.py          # Order creation flow
+│   │   └── payments.py            # Payment handlers
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── manus.py               # Manus API client
+│   │   ├── ai_fallback.py         # GPT-4/Gemini fallback
+│   │   ├── payments.py            # Payment processing
+│   │   └── pdf_generator.py      # PDF generation
+│   ├── webhooks/
+│   │   ├── __init__.py
+│   │   ├── manus.py               # Manus webhook handler
+│   │   └── yookassa.py            # ЮKassa webhook handler
 │   └── utils/
 │       ├── __init__.py
-│       ├── entities.py      # Data models and entities
-│       └── enums.py         # Enumerations for types
+│       ├── enums.py               # Enumerations
+│       └── states.py              # FSM states
+├── alembic/                       # Database migrations
+├── templates/                     # Jinja2 templates for PDF
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+├── .env.example
 ├── .gitignore
-└── CLAUDE.MD                # This file
+└── CLAUDE.MD
 ```
 
 ## Core Components
@@ -94,18 +120,26 @@ numerology/
 - Tracks AI provider usage for generating reports
 - Fields: id, order_id, provider, task_id, status, error_message, tokens_used, created_at
 
+## Tariffs (Тарифы)
+
+| Тариф | Описание | Объём | Участников | Цена |
+|-------|----------|-------|------------|------|
+| quick | Быстрый взгляд | 5-7 стр | 1 | 500₽ |
+| deep | Глубокий анализ | 15-20 стр | 1 | 1500₽ |
+| pair | Парный Оракул | 15-25 стр | 2 | 2000₽ |
+| family | Семейный Оракул | 30-50 стр | 3-5 | 3000₽ |
+
 ## Enumerations
 
-The project uses enums for type safety (defined in `src/utils/enums.py`):
-- **TariffType**: Different service pricing tiers
-- **StyleType**: Report presentation styles
-- **OrderStatus**: Order lifecycle states
-- **Currency**: Supported payment currencies
-- **PaymentMethod**: Available payment options
-- **ParticipantType**: Role in the reading (self, partner, child, etc.)
-- **Rating**: Review rating scale
-- **AiProvider**: AI service providers used
-- **AiLogStatus**: AI processing status
+- **TariffType**: quick, deep, pair, family
+- **StyleType**: analytical (аналитический), shamanic (шаманский)
+- **OrderStatus**: pending, paid, processing, completed, failed, refunded
+- **Currency**: RUB
+- **PaymentMethod**: yookassa, telegram_stars
+- **ParticipantType**: main, partner, family_member
+- **Rating**: 1-5
+- **AiProvider**: manus, gpt4, gemini
+- **AiLogStatus**: pending, success, failed
 
 ## Development Guidelines
 
@@ -130,23 +164,51 @@ The project uses enums for type safety (defined in `src/utils/enums.py`):
 ### Environment Setup
 Required environment variables in `.env`:
 ```
-BOT_TOKEN=your_telegram_bot_token
-DATABASE_URL=postgresql://user:password@host:port/database
+BOT_TOKEN=
+MANUS_API_KEY=
+OPENAI_API_KEY=
+GEMINI_API_KEY=
+YOOKASSA_SHOP_ID=
+YOOKASSA_SECRET_KEY=
+DATABASE_URL=postgresql://user:password@db:5432/numerology
+REDIS_URL=redis://redis:6379/0
+WEBHOOK_DOMAIN=https://your-domain.com
 ```
 
 ## Running the Application
 
+### With Docker (Production)
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
 # Set up environment variables
 cp .env.example .env
 # Edit .env with your values
 
+# Build and run
+docker-compose up --build
+```
+
+### Local Development
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+alembic upgrade head
+
 # Run the bot
 python src/main.py
 ```
+
+## User Flow (Пользовательский сценарий)
+
+1. **Начало**: /start → выбор тарифа
+2. **Сбор данных**: ФИО, дата рождения, время, место (для каждого участника)
+3. **Выбор стиля**: Аналитический / Шаманский
+4. **Оплата**: ЮKassa или Telegram Stars (таймаут 15 минут)
+5. **Генерация**: Отправка в Manus API (10-15 минут)
+6. **Fallback**: Manus → GPT-4 → Gemini → возврат средств
+7. **Получение**: PDF отчёт в Telegram
+8. **Отзыв**: Через 1 час - оценка 1-5 звёзд
 
 ## Future Enhancements
 
