@@ -1,43 +1,79 @@
+"""Инициализация и настройка бота."""
 import logging
-from aiogram import Bot, Dispatcher 
+from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.redis import RedisStorage
+from redis.asyncio import Redis
 
 from config import Config
-from handlers import CommandHandlers
 from database import DatabaseManager
+from handlers import commands, order_flow
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 class NumerologBot:
-    def __init__(self, config: Config):
+    """Класс для управления Telegram ботом."""
+
+    def __init__(self, config: Config, db_manager: DatabaseManager):
+        """
+        Инициализация бота.
+
+        Args:
+            config: Конфигурация приложения
+            db_manager: Менеджер базы данных
+        """
         self.config = config
-        self.bot = Bot(token=self.config.BOT_TOKEN)
-        self.dp = Dispatcher()
+        self.db_manager = db_manager
+        self.bot = Bot(token=config.BOT_TOKEN)
 
-    async def _setup_handlers(self):
-        """
-        Инициализация обработчиков бота.
+        # Redis для FSM storage
+        self.redis = Redis.from_url(config.REDIS_URL)
+        storage = RedisStorage(self.redis)
 
-        :param self: Description
-        """
-        self.command_handlers = CommandHandlers()
-        self.dp.include_router(self.command_handlers.router)
+        self.dp = Dispatcher(storage=storage)
+        self._setup_handlers()
+        self._setup_middlewares()
 
-    async def _setup_components(self):
-        """
-        Инициализация компонентов бота.        
-        
-        :param self: Description
-        """
-        self.db_manager = DatabaseManager(self.config.DATABASE_URL)
-        await self.db_manager.initialise()
+    def _setup_handlers(self):
+        """Регистрация обработчиков."""
+        self.dp.include_router(commands.router)
+        self.dp.include_router(order_flow.router)
+        logger.info("Обработчики зарегистрированы")
+
+    def _setup_middlewares(self):
+        """Настройка middleware."""
+        from aiogram import BaseMiddleware
+        from aiogram.types import Update
+        from typing import Callable, Dict, Any, Awaitable
+
+        class DbSessionMiddleware(BaseMiddleware):
+            """Middleware для добавления сессии БД."""
+
+            def __init__(self, db_manager: DatabaseManager):
+                super().__init__()
+                self.db_manager = db_manager
+
+            async def __call__(
+                self,
+                handler: Callable[[Update, Dict[str, Any]], Awaitable[Any]],
+                event: Update,
+                data: Dict[str, Any]
+            ) -> Any:
+                async with self.db_manager.async_session() as session:
+                    data["session"] = session
+                    return await handler(event, data)
+
+        self.dp.update.middleware(DbSessionMiddleware(self.db_manager))
+        logger.info("Middleware настроены")
 
     async def start(self):
-        """
-        Запуск бота.
-        
-        :param self: Description
-        """
-        logging.info("Starting Numerolog Bot...")
-        await self._setup_handlers()
-        await self._setup_components()
+        """Запуск бота."""
+        logger.info("Запуск Telegram бота...")
         await self.dp.start_polling(self.bot)
+
+    async def stop(self):
+        """Остановка бота."""
+        logger.info("Остановка Telegram бота...")
+        await self.bot.session.close()
+        await self.redis.close()
