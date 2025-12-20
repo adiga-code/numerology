@@ -195,7 +195,7 @@ async def process_birth_date(message: Message, state: FSMContext):
 
     data = await state.get_data()
     participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_date"] = birth_date
+    participants_data[data["current_participant"]]["birth_date"] = message.text
 
     await state.update_data(participants_data=participants_data)
     await state.set_state(OrderFlow.entering_birth_time)
@@ -225,7 +225,7 @@ async def process_birth_time(message: Message, state: FSMContext):
 
     data = await state.get_data()
     participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_time"] = birth_time
+    participants_data[data["current_participant"]]["birth_time"] = message.text
 
     await state.update_data(participants_data=participants_data)
     await state.set_state(OrderFlow.entering_birth_place)
@@ -360,11 +360,27 @@ async def process_style(callback: CallbackQuery, state: FSMContext, session: Asy
             ParticipantType.PARTNER if data["tariff"] == "pair" else ParticipantType.FAMILY_MEMBER
         )
 
+        # Конвертируем строки обратно в date/time объекты
+
+        birth_date = datetime.strptime(participant_data["birth_date"], "%d.%m.%Y").date()
+
+        birth_time = None
+
+        if participant_data.get("birth_time"):
+
+            birth_time = datetime.strptime(participant_data["birth_time"], "%H:%M").time()
+
+ 
+
         participant = OrderParticipant(
+
             order_id=order.id,
+
             full_name=participant_data["full_name"],
-            birth_date=participant_data["birth_date"],
-            birth_time=participant_data.get("birth_time"),
+
+            birth_date=birth_date,
+
+            birth_time=birth_time,
             birth_place=participant_data.get("birth_place"),
             participant_type=participant_type
         )
