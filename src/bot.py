@@ -37,8 +37,11 @@ class NumerologBot:
 
     def _setup_handlers(self):
         """Регистрация обработчиков."""
+        from handlers import payments
+
         self.dp.include_router(commands.router)
         self.dp.include_router(order_flow.router)
+        self.dp.include_router(payments.router)
         logger.info("Обработчики зарегистрированы")
 
     def _setup_middlewares(self):

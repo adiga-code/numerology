@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Нумерологический отчёт</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 15mm;
+            @bottom-right {
+                content: counter(page);
+                font-size: 10pt;
+                color: #666;
+            }
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #333;
+        }
+
+        .title-page {
+            text-align: center;
+            margin-top: 100px;
+            page-break-after: always;
+        }
+
+        .title-page h1 {
+            font-size: 32pt;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .title-page .subtitle {
+            font-size: 18pt;
+            color: #7f8c8d;
+            margin-bottom: 40px;
+        }
+
+        .title-page .info {
+            font-size: 12pt;
+            color: #34495e;
+            margin: 10px 0;
+        }
+
+        .participants {
+            margin: 30px 0;
+            padding: 20px;
+            background: #ecf0f1;
+            border-radius: 5px;
+        }
+
+        .participant {
+            margin: 10px 0;
+            font-size: 12pt;
+        }
+
+        .content {
+            margin-top: 30px;
+        }
+
+        h2 {
+            color: #2c3e50;
+            font-size: 16pt;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+        }
+
+        h3 {
+            color: #34495e;
+            font-size: 14pt;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        p {
+            text-align: justify;
+            margin: 10px 0;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #bdc3c7;
+            font-size: 9pt;
+            color: #7f8c8d;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Титульная страница -->
+    <div class="title-page">
+        <h1>🔮 Нумерологический отчёт</h1>
+        <div class="subtitle">{{ tariff }}</div>
+
+        <div class="participants">
+            <h3>Участники анализа:</h3>
+            {% for participant in participants %}
+            <div class="participant">
+                <strong>{{ participant.full_name }}</strong><br>
+                Дата рождения: {{ participant.birth_date }}<br>
+                Время рождения: {{ participant.birth_time }}<br>
+                Место рождения: {{ participant.birth_place }}
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="info">Стиль: {{ style }}</div>
+        <div class="info">Дата создания: {{ created_date }} {{ created_time }}</div>
+        <div class="info">Номер заказа: {{ order_uuid }}</div>
+    </div>
+
+    <!-- Содержание отчёта -->
+    <div class="content">
+        {{ content|safe }}
+    </div>
+
+    <!-- Футер -->
+    <div class="footer">
+        <p>Этот отчёт создан специально для вас на основе нумерологического анализа.</p>
+        <p>© {{ created_date }} Numerology Bot</p>
+    </div>
+</body>
+</html>
