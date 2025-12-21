@@ -39,6 +39,10 @@ def get_payment_keyboard(order_uuid: str, amount: Decimal) -> InlineKeyboardMark
             text=f"💳 ЮKassa ({amount}₽)",
             callback_data=f"pay_yookassa:{order_uuid}"
         )],
+        [InlineKeyboardButton(
+            text="🧪 Тестовый режим (без оплаты)",
+            callback_data=f"pay_test:{order_uuid}"
+        )],
     ])
 
 
@@ -209,3 +213,56 @@ async def process_yookassa_payment(callback: CallbackQuery, session: AsyncSessio
 
     await callback.answer()
     logger.info(f"Запрос оплаты ЮKassa для заказа {order_uuid}")
+
+
+@router.callback_query(F.data.startswith("pay_test:"))
+async def process_test_payment(callback: CallbackQuery, session: AsyncSession):
+    """
+    Тестовый режим - генерация отчёта без оплаты.
+
+    Args:
+        callback: Callback от inline кнопки
+        session: Сессия БД
+    """
+    order_uuid = callback.data.split(":")[1]
+
+    # Получаем заказ
+    result = await session.execute(
+        select(Order).where(Order.order_uuid == order_uuid)
+    )
+    order = result.scalar_one_or_none()
+
+    if not order:
+        await callback.answer("❌ Заказ не найден", show_alert=True)
+        return
+
+    if order.status != OrderStatus.PENDING:
+        await callback.answer("❌ Заказ уже оплачен или отменён", show_alert=True)
+        return
+
+    # Обновляем статус заказа как оплаченный (тестовый режим)
+    from datetime import datetime
+    order.status = OrderStatus.PAID
+    order.payment_method = PaymentMethod.TELEGRAM_STARS  # Условно
+    order.payment_id = "TEST_MODE"
+    order.paid_at = datetime.utcnow()
+
+    await session.commit()
+
+    await callback.message.edit_text(
+        f"🧪 <b>Тестовый режим активирован!</b>\n\n"
+        f"Заказ #{order_uuid[:8]}\n"
+        f"Сумма: БЕСПЛАТНО (тест)\n\n"
+        f"⚙️ Ваш отчёт генерируется...\n"
+        f"Это займёт 10-15 минут.\n\n"
+        f"Мы отправим вам уведомление, когда отчёт будет готов.",
+        parse_mode="HTML"
+    )
+
+    await callback.answer("✅ Тестовый режим")
+
+    logger.info(f"Тестовый режим активирован для заказа {order_uuid}")
+
+    # Запускаем генерацию AI отчёта
+    from services.ai_service import start_ai_generation
+    await start_ai_generation(order.id, session, callback.bot)
