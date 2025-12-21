@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+from xhtml2pdf import pisa
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,12 @@ async def generate_pdf(order, participants, content: str) -> str:
         pdf_filename = f"report_{order.order_uuid}.pdf"
         pdf_path = PDF_DIR / pdf_filename
 
-        HTML(string=html_content).write_pdf(str(pdf_path))
+        # Конвертируем HTML в PDF с помощью xhtml2pdf
+        with open(pdf_path, "w+b") as pdf_file:
+            pisa_status = pisa.CreatePDF(html_content, dest=pdf_file)
+
+        if pisa_status.err:
+            raise Exception(f"Ошибка при создании PDF: {pisa_status.err}")
 
         logger.info(f"PDF сгенерирован: {pdf_path}")
         return str(pdf_path)
