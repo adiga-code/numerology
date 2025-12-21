@@ -382,16 +382,18 @@ async def process_style(callback: CallbackQuery, state: FSMContext, session: Asy
 
     await state.clear()
 
-    # TODO: Переход к оплате
+    # Переход к оплате
+    from handlers.payments import get_payment_keyboard
+
     await callback.message.edit_text(
         f"✅ <b>Заказ создан!</b>\n\n"
         f"Номер заказа: <code>{order.order_uuid}</code>\n"
         f"Тариф: {data['tariff']}\n"
         f"Стиль: {style_names[style]}\n"
+        f"Участников: {len(data['participants_data'])}\n"
         f"Сумма: {order.amount}₽\n\n"
-        f"💳 <b>Оплата</b>\n\n"
-        f"Функция оплаты будет добавлена в следующей версии.\n"
-        f"Пока заказ сохранён в базе данных.",
+        f"💳 <b>Выберите способ оплаты:</b>",
+        reply_markup=get_payment_keyboard(order.order_uuid, order.amount),
         parse_mode="HTML"
     )
 
