@@ -1,3 +1,15 @@
+# Environment
 /.env
 /.venv
 /db.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# Project
+/pdfs/
+*.log
