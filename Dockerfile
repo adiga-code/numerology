@@ -8,15 +8,12 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libpangoft2-1.0-0 \
-    libgdk-pixbuf2.0-0 \
+    libgdk-pixbuf-2.0-0 \
     libffi-dev \
     shared-mime-info \
     # Шрифты для кириллицы
     fonts-dejavu \
-    fonts-dejavu-core \
-    fonts-dejavu-extra \
     fonts-liberation \
-    fonts-liberation2 \
     # Очистка кеша
     && rm -rf /var/lib/apt/lists/*
 
