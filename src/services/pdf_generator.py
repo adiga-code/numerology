@@ -59,7 +59,8 @@ async def generate_pdf(order, participants, content: str) -> str:
         pdf_filename = f"report_{order.order_uuid}.pdf"
         pdf_path = PDF_DIR / pdf_filename
 
-        HTML(string=html_content).write_pdf(str(pdf_path))
+        # WeasyPrint с правильной кодировкой для русского языка
+        HTML(string=html_content, encoding='utf-8').write_pdf(str(pdf_path))
 
         logger.info(f"PDF сгенерирован: {pdf_path}")
         return str(pdf_path)
