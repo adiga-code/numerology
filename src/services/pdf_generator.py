@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+import pdfkit
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +55,23 @@ async def generate_pdf(order, participants, content: str) -> str:
         # Рендерим HTML
         html_content = template.render(**context)
 
-        # Генерируем PDF с помощью WeasyPrint
+        # Генерируем PDF с помощью pdfkit/wkhtmltopdf
         pdf_filename = f"report_{order.order_uuid}.pdf"
         pdf_path = PDF_DIR / pdf_filename
 
-        # WeasyPrint с правильной кодировкой для русского языка
-        HTML(string=html_content, encoding='utf-8').write_pdf(str(pdf_path))
+        # Настройки для pdfkit с поддержкой русского языка
+        options = {
+            'encoding': 'UTF-8',
+            'page-size': 'A4',
+            'margin-top': '20mm',
+            'margin-right': '15mm',
+            'margin-bottom': '20mm',
+            'margin-left': '15mm',
+            'no-outline': None,
+            'enable-local-file-access': None
+        }
+
+        pdfkit.from_string(html_content, str(pdf_path), options=options)
 
         logger.info(f"PDF сгенерирован: {pdf_path}")
         return str(pdf_path)

@@ -2,16 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей для WeasyPrint
+# Установка системных зависимостей для pdfkit/wkhtmltopdf
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    libcairo2-dev \
-    pkg-config \
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
-    libgdk-pixbuf-xlib-2.0-0 \
-    libffi-dev \
-    shared-mime-info \
+    wkhtmltopdf \
+    xvfb \
     fonts-dejavu \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
