@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка системных зависимостей для xhtml2pdf
+# Установка системных зависимостей для WeasyPrint
 RUN apt-get update && apt-get install -y \
     build-essential \
     libcairo2-dev \
