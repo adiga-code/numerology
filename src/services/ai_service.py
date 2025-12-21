@@ -35,6 +35,9 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         )
         order = result.scalar_one()
 
+        # Сохраняем user для использования в exception handler
+        user = order.user
+
         result = await session.execute(
             select(OrderParticipant).where(OrderParticipant.order_id == order_id)
         )
@@ -116,7 +119,6 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         # Отправляем PDF пользователю
         from aiogram.types import FSInputFile
 
-        user = order.user
         await bot.send_document(
             chat_id=user.telegram_id,
             document=FSInputFile(pdf_path),
@@ -146,7 +148,6 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         await session.commit()
 
         # Уведомляем пользователя
-        user = order.user
         await bot.send_message(
             chat_id=user.telegram_id,
             text=(
