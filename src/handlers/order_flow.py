@@ -225,160 +225,12 @@ async def process_birth_time(message: Message, state: FSMContext):
 
     data = await state.get_data()
     participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_time"] = message.text
-
-    await state.update_data(participants_data=participants_data)
-    await state.set_state(OrderFlow.entering_birth_place)
-
-    await message.answer(
-        f"✅ Время рождения: {message.text}\n\n"
-        "Введите место рождения (город):",
-        reply_markup=get_skip_keyboard()
-    )
-
-
-@router.callback_query(OrderFlow.entering_birth_time, F.data == "skip")
-async def skip_birth_time(callback: CallbackQuery, state: FSMContext):
-    """Пропуск времени рождения."""
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_time"] = None
-
-    await state.update_data(participants_data=participants_data)
-    await state.set_state(OrderFlow.entering_birth_place)
-
-    await callback.message.edit_text(
-        "⏭ Время рождения пропущено\n\n"
-        "Введите место рождения (город):",
-        reply_markup=get_skip_keyboard()
-    )
-    await callback.answer()
-
-
-@router.message(OrderFlow.entering_birth_place, F.text)
-async def process_birth_place(message: Message, state: FSMContext):
-    """
-    Обработка ввода места рождения.
-
-    Args:
-        message: Сообщение от пользователя
-        state: FSM контекст
-    """
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_place"] = message.text
-
-    await state.update_data(participants_data=participants_data)
-    await check_next_participant(message, state)
-
-
-@router.callback_query(OrderFlow.entering_birth_place, F.data == "skip")
-async def skip_birth_place(callback: CallbackQuery, state: FSMContext):
-    """Пропуск места рождения."""
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_place"] = None
-
-    await state.update_data(participants_data=participants_data)
-    await check_next_participant(callback.message, state)
-    await callback.answer()
-
-
-async def check_next_participant(message: Message, state: FSMContext):
-    """
-    Проверка необходимости добавления следующего участника.
-
-    Args:
-        message: Сообщение
-        state: FSM контекст
-    """
-    data = await state.get_data()
-    current = data["current_participant"]
-    total = data["participants_count"]
-
-    if current + 1 < total:
-        # Есть ещё участники
-        await state.update_data(current_participant=current + 1)
-        await state.set_state(OrderFlow.entering_full_name)
-
-        await message.answer(
-            f"✅ Данные участника {current + 1} сохранены\n\n"
-            f"📝 <b>Участник {current + 2}</b>\n\n"
-            "Введите ФИО:",
-            parse_mode="HTML"
-        )
-    else:
-        # Все участники добавлены, переходим к выбору стиля
-        await state.set_state(OrderFlow.choosing_style)
-        await message.answer(
-            "✅ Все данные собраны\n\n"
-            "Выберите стиль отчёта:",
-            reply_markup=get_style_keyboard()
-        )
-
-
-@router.callback_query(OrderFlow.choosing_style, F.data.startswith("style:"))
-async def process_style(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
-    """
-    Обработка выбора стиля и создание заказа.
-
-    Args:
-        callback: Callback от inline кнопки
-        state: FSM контекст
-        session: Сессия БД
-    """
-    style = callback.data.split(":")[1]
-    data = await state.get_data()
-
-    style_names = {
-        "analytical": "Аналитический",
-        "shamanic": "Шаманский"
-    }
-
-    # Получаем пользователя
-    result = await session.execute(
-        select(User).where(User.telegram_id == callback.from_user.id)
-    )
-    user = result.scalar_one()
-
-    # Создаём заказ
-    tariff = TariffType(data["tariff"])
-    order = Order(
-        user_id=user.id,
-        tariff=tariff,
-        style=StyleType(style),
-        status=OrderStatus.PENDING,
-        amount=TARIFF_PRICES[tariff],
-        currency=Currency.RUB
-    )
-    session.add(order)
-    await session.flush()
-
-    # Добавляем участников
-    for idx, participant_data in enumerate(data["participants_data"]):
-        participant_type = ParticipantType.MAIN if idx == 0 else (
-            ParticipantType.PARTNER if data["tariff"] == "pair" else ParticipantType.FAMILY_MEMBER
-        )
-
-        # Конвертируем строки обратно в date/time объекты
-
-        birth_date = datetime.strptime(participant_data["birth_date"], "%d.%m.%Y").date()
-
-        birth_time = None
-
-        if participant_data.get("birth_time"):
-
-            birth_time = datetime.strptime(participant_data["birth_time"], "%H:%M").time()
-
- 
 
         participant = OrderParticipant(
 
             order_id=order.id,
 
             full_name=participant_data["full_name"],
-
-            birth_date=birth_date,
 
             birth_time=birth_time,
             birth_place=participant_data.get("birth_place"),
@@ -390,16 +242,18 @@ async def process_style(callback: CallbackQuery, state: FSMContext, session: Asy
 
     await state.clear()
 
-    # TODO: Переход к оплате
+    # Переход к оплате
+    from handlers.payments import get_payment_keyboard
+
     await callback.message.edit_text(
         f"✅ <b>Заказ создан!</b>\n\n"
         f"Номер заказа: <code>{order.order_uuid}</code>\n"
         f"Тариф: {data['tariff']}\n"
         f"Стиль: {style_names[style]}\n"
+        f"Участников: {len(data['participants_data'])}\n"
         f"Сумма: {order.amount}₽\n\n"
-        f"💳 <b>Оплата</b>\n\n"
-        f"Функция оплаты будет добавлена в следующей версии.\n"
-        f"Пока заказ сохранён в базе данных.",
+        f"💳 <b>Выберите способ оплаты:</b>",
+        reply_markup=get_payment_keyboard(order.order_uuid, order.amount),
         parse_mode="HTML"
     )
 
