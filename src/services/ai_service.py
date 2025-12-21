@@ -25,11 +25,18 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         bot: Экземпляр бота
     """
     try:
-        # Получаем заказ с участниками
+        # Получаем заказ с участниками и пользователем (eager loading)
+        from sqlalchemy.orm import selectinload
+
         result = await session.execute(
-            select(Order).where(Order.id == order_id)
+            select(Order)
+            .options(selectinload(Order.user))
+            .where(Order.id == order_id)
         )
         order = result.scalar_one()
+
+        # Сохраняем user для использования в exception handler
+        user = order.user
 
         result = await session.execute(
             select(OrderParticipant).where(OrderParticipant.order_id == order_id)
@@ -59,13 +66,23 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
 
         # Инициализируем клиенты
         config = Config()
-        manus_client = ManusClient(config.MANUS_API_KEY, config.WEBHOOK_DOMAIN) if config.MANUS_API_KEY else None
-        gpt4_client = GPT4Client(config.OPENAI_API_KEY) if config.OPENAI_API_KEY else None
+
+        # Проверяем наличие ключей и инициализируем только доступные клиенты
+        manus_client = None
+        if config.MANUS_API_KEY:
+            manus_client = ManusClient(config.MANUS_API_KEY, config.WEBHOOK_DOMAIN)
+
+        gpt4_client = None
+        if config.OPENAI_API_KEY:
+            gpt4_client = GPT4Client(config.OPENAI_API_KEY)
+
+        if not gpt4_client and not manus_client:
+            raise Exception("Не настроен ни один AI провайдер. Добавьте OPENAI_API_KEY или MANUS_API_KEY в .env")
 
         # Создаём AI лог
         ai_log = AiLog(
             order_id=order.id,
-            provider=AiProvider.GPT4,  # Начинаем с GPT-4 для тестирования
+            provider=AiProvider.GPT4 if gpt4_client else AiProvider.MANUS,
             status=AiLogStatus.PENDING
         )
         session.add(ai_log)
@@ -102,7 +119,6 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         # Отправляем PDF пользователю
         from aiogram.types import FSInputFile
 
-        user = order.user
         await bot.send_document(
             chat_id=user.telegram_id,
             document=FSInputFile(pdf_path),
@@ -132,7 +148,6 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         await session.commit()
 
         # Уведомляем пользователя
-        user = order.user
         await bot.send_message(
             chat_id=user.telegram_id,
             text=(
