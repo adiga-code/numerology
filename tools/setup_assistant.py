@@ -13,9 +13,24 @@
 import asyncio
 import sys
 from pathlib import Path
-from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
+
+# Проверяем версию OpenAI
+try:
+    import openai
+    from openai import AsyncOpenAI
+
+    # Проверяем что версия >= 1.20.0 (минимум для vector_stores)
+    version = tuple(map(int, openai.__version__.split('.')[:2]))
+    if version < (1, 20):
+        print(f"❌ Ошибка: Требуется openai >= 1.20.0, установлена {openai.__version__}")
+        print("Обновите библиотеку: pip install --upgrade openai")
+        sys.exit(1)
+except ImportError:
+    print("❌ Ошибка: Библиотека openai не установлена")
+    print("Установите: pip install openai>=1.55.0")
+    sys.exit(1)
 
 # Загружаем переменные окружения
 load_dotenv()
