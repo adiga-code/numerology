@@ -74,7 +74,10 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
 
         gpt4_client = None
         if config.OPENAI_API_KEY:
-            gpt4_client = GPT4Client(config.OPENAI_API_KEY)
+            gpt4_client = GPT4Client(
+                api_key=config.OPENAI_API_KEY,
+                assistant_id=config.OPENAI_ASSISTANT_ID or None
+            )
 
         if not gpt4_client and not manus_client:
             raise Exception("Не настроен ни один AI провайдер. Добавьте OPENAI_API_KEY или MANUS_API_KEY в .env")

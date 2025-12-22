@@ -13,6 +13,7 @@ class Config(BaseSettings):
     # AI Services
     MANUS_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+    OPENAI_ASSISTANT_ID: str = ""  # ID Assistant с базой знаний (опционально)
     GEMINI_API_KEY: str = ""
 
     # Payments

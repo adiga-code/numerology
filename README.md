@@ -6,6 +6,7 @@
 
 - 🔮 4 тарифа: Быстрый взгляд, Глубокий анализ, Парный Оракул, Семейный Оракул
 - 🤖 AI генерация отчётов (Manus API, GPT-4, Gemini)
+- 📚 OpenAI Assistant с базой знаний из PDF (автоматический RAG)
 - 💳 Оплата через ЮKassa и Telegram Stars
 - 📄 Генерация PDF отчётов
 - 🔄 Автоматический fallback между AI провайдерами
@@ -43,6 +44,7 @@ cp .env.example .env
 BOT_TOKEN=your_telegram_bot_token
 MANUS_API_KEY=your_manus_api_key
 OPENAI_API_KEY=your_openai_api_key
+OPENAI_ASSISTANT_ID=  # Опционально, см. docs/ASSISTANT_SETUP.md
 GEMINI_API_KEY=your_gemini_api_key
 YOOKASSA_SHOP_ID=your_shop_id
 YOOKASSA_SECRET_KEY=your_secret_key
@@ -50,6 +52,8 @@ DATABASE_URL=postgresql+asyncpg://numerology:numerology@db:5432/numerology
 REDIS_URL=redis://redis:6379/0
 WEBHOOK_DOMAIN=https://your-domain.com
 ```
+
+**💡 Рекомендуется:** Настройте OpenAI Assistant с базой знаний для более точных отчётов. См. [docs/ASSISTANT_SETUP.md](docs/ASSISTANT_SETUP.md)
 
 ### 3. Запуск с Docker
 
