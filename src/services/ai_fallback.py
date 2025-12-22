@@ -73,10 +73,20 @@ class GPT4Client:
             content=prompt
         )
 
-        # Запускаем run
+        # Запускаем run с дополнительными инструкциями и увеличенным лимитом токенов
         run = await self.threads_api.runs.create(
             thread_id=thread.id,
-            assistant_id=self.assistant_id
+            assistant_id=self.assistant_id,
+            # Явные дополнительные инструкции для каждого запроса
+            additional_instructions="""КРИТИЧЕСКИ ВАЖНО:
+- СТРОГО СОБЛЮДАЙ объём, указанный в запросе пользователя
+- Если требуется 15-20 страниц, генерируй ПОЛНЫЙ текст на 15-20 страниц
+- НЕ СОКРАЩАЙ информацию, расписывай всё МАКСИМАЛЬНО ПОДРОБНО
+- Используй ВСЮ доступную информацию из базы знаний
+- ОБЯЗАТЕЛЬНО следуй структуре из запроса
+- НЕ ОСТАНАВЛИВАЙСЯ до достижения требуемого объёма""",
+            # Увеличиваем лимит токенов для длинных отчётов (16000 ~ 20-25 страниц)
+            max_completion_tokens=16000
         )
 
         logger.info(f"Запущен run: {run.id}")
@@ -117,7 +127,20 @@ class GPT4Client:
 
         result_text = "\n".join(text_content)
 
-        logger.info(f"GPT-4 Assistant отчёт сгенерирован (thread: {thread.id})")
+        # Логируем статистику ответа
+        char_count = len(result_text)
+        word_count = len(result_text.split())
+        estimated_pages = char_count / 2800  # ~2800 символов на страницу А4
+
+        logger.info(
+            f"GPT-4 Assistant отчёт сгенерирован (thread: {thread.id}): "
+            f"{char_count} символов, {word_count} слов, ~{estimated_pages:.1f} страниц"
+        )
+
+        # Проверяем usage если доступно
+        if hasattr(run_status, 'usage') and run_status.usage:
+            logger.info(f"Использовано токенов: {run_status.usage.completion_tokens}/{run_status.usage.total_tokens}")
+
         return result_text
 
     async def _generate_with_chat(self, prompt: str) -> str:

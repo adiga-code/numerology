@@ -831,16 +831,18 @@ def build_numerology_prompt(tariff: str, style: str, participants: List[Dict[str
         raise ValueError(f"Unknown tariff/style combination: {tariff}/{style}")
 
     # Подстановка данных участников
+    formatted_prompt = ""
+
     if tariff in ['quick', 'deep']:
         # Один участник
         participant_data = format_participant_data(participants[0])
-        return base_prompt.format(participant_data=participant_data)
+        formatted_prompt = base_prompt.format(participant_data=participant_data)
 
     elif tariff == 'pair':
         # Два участника
         participant_1_data = format_participant_data(participants[0])
         participant_2_data = format_participant_data(participants[1])
-        return base_prompt.format(
+        formatted_prompt = base_prompt.format(
             participant_1_data=participant_1_data,
             participant_2_data=participant_2_data
         )
@@ -853,4 +855,27 @@ def build_numerology_prompt(tariff: str, style: str, participants: List[Dict[str
             family_data += format_participant_data(p)
             family_data += "\n"
 
-        return base_prompt.format(family_data=family_data)
+        formatted_prompt = base_prompt.format(family_data=family_data)
+
+    # Добавляем усиленное напоминание о длине в конец промпта
+    length_reminder = """
+
+═══════════════════════════════════════════════════════════════
+⚠️  КРИТИЧЕСКИ ВАЖНОЕ ТРЕБОВАНИЕ ПО ОБЪЁМУ ⚠️
+═══════════════════════════════════════════════════════════════
+
+Ты ОБЯЗАН сгенерировать отчёт ПОЛНОГО указанного объёма!
+
+НЕ ОСТАНАВЛИВАЙСЯ раньше времени!
+НЕ СОКРАЩАЙ разделы!
+РАСПИСЫВАЙ каждый пункт МАКСИМАЛЬНО ПОДРОБНО!
+ИСПОЛЬЗУЙ ВСЮ информацию из базы знаний!
+
+Помни: клиент платит за ДЕТАЛЬНЫЙ анализ.
+Короткий отчёт = плохое качество = неудовлетворённый клиент.
+
+НАЧИНАЙ ГЕНЕРАЦИЮ ПОЛНОГО ОТЧЁТА ПРЯМО СЕЙЧАС!
+═══════════════════════════════════════════════════════════════
+"""
+
+    return formatted_prompt + length_reminder
