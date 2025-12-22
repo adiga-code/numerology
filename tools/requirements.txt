@@ -1,3 +1,4 @@
 # Зависимости для скрипта setup_assistant.py
+# Поддерживается как OpenAI SDK 1.x (>= 1.55.0), так и 2.x
 openai>=1.55.0
 python-dotenv>=1.0.0

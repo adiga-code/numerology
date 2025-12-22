@@ -174,19 +174,23 @@ docker-compose logs -f app | grep -i assistant
 
 ### Ошибка "AttributeError: 'AsyncBeta' object has no attribute 'vector_stores'"
 
-**Причина:** Установлена старая версия библиотеки `openai`
+**Причина:** В OpenAI SDK версии 2.x произошли breaking changes - `vector_stores` переместили из `client.beta.vector_stores` в `client.vector_stores`
 
 **Решение:**
+Скрипт автоматически определяет версию SDK и использует правильный API endpoint. Если ошибка все еще возникает, обновите скрипт:
+
 ```bash
-pip install --upgrade openai
-# Или конкретная версия
-pip install openai>=1.55.0
+git pull  # Получить последнюю версию с автоматической совместимостью
 ```
+
+Поддерживаемые версии:
+- OpenAI SDK 1.x (>= 1.55.0): `client.beta.vector_stores`
+- OpenAI SDK 2.x (>= 2.0.0): `client.vector_stores`
 
 Проверьте версию:
 ```bash
 python -c "import openai; print(openai.__version__)"
-# Должно быть >= 1.55.0
+# Работает с версиями >= 1.55.0
 ```
 
 ### Ошибка "Assistant run failed"
