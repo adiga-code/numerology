@@ -71,9 +71,30 @@ class NumerologBot:
         self.dp.update.middleware(DbSessionMiddleware(self.db_manager))
         logger.info("Middleware настроены")
 
+    async def _setup_bot_commands(self):
+        """Настройка меню команд бота."""
+        from aiogram.types import BotCommand
+
+        commands = [
+            BotCommand(command="start", description="🏠 Начало работы"),
+            BotCommand(command="new", description="➕ Создать новый заказ"),
+            BotCommand(command="history", description="📋 История заказов"),
+            BotCommand(command="download", description="📥 Скачать отчёт повторно"),
+            BotCommand(command="help", description="❓ Справка"),
+            BotCommand(command="support", description="💬 Поддержка"),
+            BotCommand(command="cancel", description="❌ Отменить текущий заказ"),
+        ]
+
+        await self.bot.set_my_commands(commands)
+        logger.info("Меню команд настроено")
+
     async def start(self):
         """Запуск бота."""
         logger.info("Запуск Telegram бота...")
+
+        # Настраиваем меню команд
+        await self._setup_bot_commands()
+
         await self.dp.start_polling(self.bot)
 
     async def stop(self):
