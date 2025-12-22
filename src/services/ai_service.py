@@ -51,8 +51,8 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         participants_data = [
             {
                 "full_name": p.full_name,
-                "birth_date": p.birth_date.strftime("%d.%m.%Y"),
-                "birth_time": p.birth_time.strftime("%H:%M") if p.birth_time else None,
+                "birth_date": p.birth_date,  # Передаем datetime объект
+                "birth_time": p.birth_time,  # Передаем datetime объект или None
                 "birth_place": p.birth_place
             }
             for p in participants
@@ -63,6 +63,9 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
             style=order.style.value,
             participants=participants_data
         )
+
+        # Логирование промпта для дебага
+        logger.debug(f"Промпт для заказа {order.id} (первые 500 символов): {prompt[:500]}...")
 
         # Инициализируем клиенты
         config = Config()

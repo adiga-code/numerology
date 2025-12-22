@@ -1,8 +1,10 @@
 """Клиент для работы с Manus API."""
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import httpx
+
+from services.prompts import build_numerology_prompt as build_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -95,59 +97,28 @@ class ManusClient:
 def build_numerology_prompt(
     tariff: str,
     style: str,
-    participants: list
+    participants: List[Dict[str, Any]]
 ) -> str:
     """
     Построение промпта для нумерологического анализа.
 
+    DEPRECATED: Используйте services.prompts.build_numerology_prompt напрямую.
+    Эта функция оставлена для обратной совместимости.
+
     Args:
-        tariff: Тип тарифа
-        style: Стиль отчёта
+        tariff: Тип тарифа ('quick', 'deep', 'pair', 'family')
+        style: Стиль отчёта ('analytical', 'shamanic')
         participants: Список участников с данными
 
     Returns:
         str: Промпт для AI
     """
-    style_description = {
-        "analytical": "аналитическом, научном стиле с структурированным подходом",
-        "shamanic": "шаманском, эзотерическом стиле с образным языком"
-    }
+    prompt = build_prompt(tariff, style, participants)
 
-    tariff_description = {
-        "quick": "краткий нумерологический анализ (5-7 страниц)",
-        "deep": "глубокий нумерологический анализ с использованием Генокода и метода Пифагора (15-20 страниц)",
-        "pair": "анализ совместимости пары (15-25 страниц)",
-        "family": "семейный нумерологический анализ (30-50 страниц)"
-    }
-
-    prompt = f"""Создай {tariff_description[tariff]} в {style_description[style]}.
-
-Участники:
-"""
-
-    for idx, p in enumerate(participants, 1):
-        prompt += f"\n{idx}. {p['full_name']}"
-        prompt += f"\n   Дата рождения: {p['birth_date']}"
-        if p.get('birth_time'):
-            prompt += f"\n   Время рождения: {p['birth_time']}"
-        if p.get('birth_place'):
-            prompt += f"\n   Место рождения: {p['birth_place']}"
-        prompt += "\n"
-
-    prompt += """
-Структура отчёта должна включать:
-1. Введение
-2. Нумерологический профиль каждого участника
-3. Основные жизненные циклы и периоды
-4. Таланты и способности
-5. Рекомендации для развития
-"""
-
-    if tariff == "pair":
-        prompt += "6. Анализ совместимости пары\n7. Рекомендации для гармоничных отношений\n"
-    elif tariff == "family":
-        prompt += "6. Семейная динамика и взаимодействия\n7. Рекомендации для семейной гармонии\n"
-
-    prompt += "\nОтчёт должен быть профессиональным, детальным и практически применимым."
+    # Логирование длины промпта для мониторинга
+    logger.info(
+        f"Сгенерирован промпт для {tariff}/{style}, "
+        f"длина: {len(prompt)} символов (~{len(prompt.split())} слов)"
+    )
 
     return prompt
