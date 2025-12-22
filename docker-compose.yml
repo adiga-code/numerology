@@ -45,6 +45,7 @@ services:
       - ./src:/app/src
       - ./alembic:/app/alembic
       - ./templates:/app/templates
+      - pdf_data:/app/pdfs
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -57,3 +58,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  pdf_data:
