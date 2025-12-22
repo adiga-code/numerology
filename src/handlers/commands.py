@@ -137,7 +137,7 @@ async def history_handler(message: Message, session: AsyncSession):
         )
 
         if order.status.value == "completed" and order.pdf_url:
-            text += f"Скачать: /download_{order.order_uuid[:8]}\n"
+            text += f"Скачать: /download {order.order_uuid[:8]}\n"
 
         text += "\n"
 
