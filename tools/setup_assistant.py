@@ -46,6 +46,27 @@ async def setup_assistant(pdf_path: str):
 
     client = AsyncOpenAI(api_key=api_key)
 
+    # Определяем, где находится vector_stores API (версия 1.x vs 2.x)
+    # В версии 2.x: client.vector_stores
+    # В версии 1.x: client.beta.vector_stores
+    vector_stores_api = None
+    assistants_api = None
+
+    if hasattr(client, 'vector_stores'):
+        # OpenAI >= 2.0
+        vector_stores_api = client.vector_stores
+        assistants_api = client.beta.assistants
+        print(f"📌 Используется OpenAI SDK >= 2.0 (версия: {openai.__version__})")
+    elif hasattr(client.beta, 'vector_stores'):
+        # OpenAI 1.x
+        vector_stores_api = client.beta.vector_stores
+        assistants_api = client.beta.assistants
+        print(f"📌 Используется OpenAI SDK 1.x (версия: {openai.__version__})")
+    else:
+        print(f"❌ Ошибка: Vector Stores API недоступен в версии {openai.__version__}")
+        print("Обновите библиотеку: pip install --upgrade openai")
+        sys.exit(1)
+
     # Проверяем файл
     pdf_file = Path(pdf_path)
     if not pdf_file.exists():
@@ -65,7 +86,7 @@ async def setup_assistant(pdf_path: str):
 
     # Шаг 2: Создание Vector Store
     print("🔧 Создаем Vector Store...")
-    vector_store = await client.beta.vector_stores.create(
+    vector_store = await vector_stores_api.create(
         name="Numerology Knowledge Base",
         file_ids=[uploaded_file.id]
     )
@@ -75,7 +96,7 @@ async def setup_assistant(pdf_path: str):
     # Ожидаем индексацию
     print("⏳ Ожидаем завершения индексации...")
     while True:
-        vs_status = await client.beta.vector_stores.retrieve(vector_store.id)
+        vs_status = await vector_stores_api.retrieve(vector_store.id)
         if vs_status.status == "completed":
             print(f"✅ Индексация завершена! Файлов в базе: {vs_status.file_counts.completed}")
             break
@@ -87,7 +108,7 @@ async def setup_assistant(pdf_path: str):
 
     # Шаг 3: Создание Assistant
     print("🤖 Создаем Assistant...")
-    assistant = await client.beta.assistants.create(
+    assistant = await assistants_api.create(
         name="Numerology Expert",
         instructions="""Ты профессиональный нумеролог с многолетним опытом.
 

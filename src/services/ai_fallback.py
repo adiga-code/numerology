@@ -22,6 +22,11 @@ class GPT4Client:
         self.client = AsyncOpenAI(api_key=api_key)
         self.assistant_id = assistant_id
 
+        # Определяем API endpoint для assistants (совместимость с openai 1.x и 2.x)
+        # В обеих версиях assistants находится в beta
+        self.assistants_api = self.client.beta.assistants
+        self.threads_api = self.client.beta.threads
+
     async def generate_report(self, prompt: str) -> str:
         """
         Генерация отчёта через GPT-4.
@@ -58,18 +63,18 @@ class GPT4Client:
             str: Сгенерированный текст
         """
         # Создаём новый thread для каждого заказа
-        thread = await self.client.beta.threads.create()
+        thread = await self.threads_api.create()
         logger.info(f"Создан thread: {thread.id}")
 
         # Добавляем сообщение пользователя
-        await self.client.beta.threads.messages.create(
+        await self.threads_api.messages.create(
             thread_id=thread.id,
             role="user",
             content=prompt
         )
 
         # Запускаем run
-        run = await self.client.beta.threads.runs.create(
+        run = await self.threads_api.runs.create(
             thread_id=thread.id,
             assistant_id=self.assistant_id
         )
@@ -78,7 +83,7 @@ class GPT4Client:
 
         # Ждём завершения
         while True:
-            run_status = await self.client.beta.threads.runs.retrieve(
+            run_status = await self.threads_api.runs.retrieve(
                 thread_id=thread.id,
                 run_id=run.id
             )
@@ -93,7 +98,7 @@ class GPT4Client:
             await asyncio.sleep(2)
 
         # Получаем ответ
-        messages = await self.client.beta.threads.messages.list(
+        messages = await self.threads_api.messages.list(
             thread_id=thread.id,
             order="desc",
             limit=1
