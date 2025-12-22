@@ -1,117 +1,26 @@
-"""GPT клиент с поддержкой PDF книги (Method 2 - Chat API)."""
+"""GPT клиент с поддержкой PDF книги (Method 1 - Assistants API с file_search)."""
 import logging
 from pathlib import Path
 from typing import Optional
 from openai import AsyncOpenAI
-from PyPDF2 import PdfReader
 
 from services.prompts import get_system_prompt, build_detailed_prompt
 
 logger = logging.getLogger(__name__)
 
 
-class PDFBookLoader:
-    """Загрузчик и кэш для PDF книги."""
-
-    def __init__(self, book_path: str):
-        """
-        Инициализация загрузчика книги.
-
-        Args:
-            book_path: Путь к PDF файлу книги
-        """
-        self.book_path = Path(book_path)
-        self._cached_text: Optional[str] = None
-        self._is_loaded = False
-
-    def load_book(self) -> str:
-        """
-        Загрузка и извлечение текста из PDF книги.
-
-        Returns:
-            str: Извлечённый текст из книги
-
-        Raises:
-            FileNotFoundError: Если книга не найдена
-            Exception: Если не удалось извлечь текст
-        """
-        # Если уже загружено - вернуть из кэша
-        if self._is_loaded and self._cached_text:
-            logger.debug("Использую кэшированный текст книги")
-            return self._cached_text
-
-        if not self.book_path.exists():
-            raise FileNotFoundError(
-                f"PDF книга не найдена: {self.book_path}\n"
-                f"Поместите файл numerology_book.pdf в директорию books/"
-            )
-
-        try:
-            logger.info(f"Загрузка PDF книги из {self.book_path}")
-            reader = PdfReader(str(self.book_path))
-
-            # Извлекаем текст со всех страниц
-            text_parts = []
-            for i, page in enumerate(reader.pages, 1):
-                text = page.extract_text()
-                if text:
-                    text_parts.append(text)
-                    logger.debug(f"Извлечена страница {i}/{len(reader.pages)}")
-
-            full_text = "\n\n".join(text_parts)
-
-            if not full_text.strip():
-                raise Exception("Не удалось извлечь текст из PDF (файл пустой или защищён)")
-
-            # Кэшируем результат
-            self._cached_text = full_text
-            self._is_loaded = True
-
-            logger.info(
-                f"PDF книга загружена успешно: "
-                f"{len(reader.pages)} страниц, "
-                f"{len(full_text)} символов"
-            )
-
-            return full_text
-
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке PDF книги: {e}")
-            raise
-
-    def get_book_summary(self) -> str:
-        """
-        Получить краткую информацию о загруженной книге.
-
-        Returns:
-            str: Информация о книге
-        """
-        if not self._is_loaded:
-            return "Книга не загружена"
-
-        char_count = len(self._cached_text) if self._cached_text else 0
-        word_count = len(self._cached_text.split()) if self._cached_text else 0
-
-        return (
-            f"Книга загружена: {self.book_path.name}\n"
-            f"Символов: {char_count:,}\n"
-            f"Слов (примерно): {word_count:,}"
-        )
-
-
-class GPTClientWithBook:
+class GPTAssistantWithBook:
     """
-    GPT клиент с использованием PDF книги в контексте (Method 2 - Chat API).
+    GPT клиент с использованием Assistants API и file_search (Method 1).
 
-    Преимущества этого метода:
-    - Простота реализации
-    - Полный контроль над контекстом
-    - Ниже стоимость (нет дополнительных расходов на vector store)
-    - Быстрее (нет задержки на file_search)
+    Преимущества:
+    - Поддержка БОЛЬШИХ книг (600+ страниц)
+    - Автоматический поиск релевантных секций через vector store
+    - Не нужно управлять размером контекста вручную
 
-    Ограничения:
-    - Размер книги ограничен context window (для gpt-4-turbo ~128k токенов)
-    - Весь текст передаётся с каждым запросом
+    Недостатки:
+    - Дороже (платный vector store)
+    - Медленнее инициализация (загрузка в vector store)
     """
 
     def __init__(
@@ -121,7 +30,7 @@ class GPTClientWithBook:
         model: str = "gpt-4-turbo-preview"
     ):
         """
-        Инициализация GPT клиента с книгой.
+        Инициализация GPT клиента с книгой через Assistants API.
 
         Args:
             api_key: API ключ OpenAI
@@ -130,65 +39,96 @@ class GPTClientWithBook:
         """
         self.client = AsyncOpenAI(api_key=api_key)
         self.model = model
-        self.book_loader = PDFBookLoader(book_path)
-        self.book_text: Optional[str] = None
+        self.book_path = Path(book_path)
+
+        # ID ресурсов OpenAI (заполняются при инициализации)
+        self.assistant_id: Optional[str] = None
+        self.vector_store_id: Optional[str] = None
+        self.file_id: Optional[str] = None
 
     async def initialize(self):
         """
-        Инициализация клиента - загрузка книги в память.
+        Инициализация клиента - загрузка книги в vector store и создание ассистента.
 
         Вызывается один раз при старте приложения.
         """
         try:
-            self.book_text = self.book_loader.load_book()
-            logger.info("GPT клиент с книгой инициализирован успешно")
-            logger.info(self.book_loader.get_book_summary())
+            if not self.book_path.exists():
+                raise FileNotFoundError(
+                    f"PDF книга не найдена: {self.book_path}\n"
+                    f"Поместите файл numerology_book.pdf в директорию books/"
+                )
+
+            logger.info(f"Загрузка PDF книги {self.book_path.name} в OpenAI...")
+
+            # Шаг 1: Загружаем файл в OpenAI
+            with open(self.book_path, "rb") as f:
+                file = await self.client.files.create(
+                    file=f,
+                    purpose="assistants"
+                )
+            self.file_id = file.id
+            logger.info(f"Файл загружен: {self.file_id}")
+
+            # Шаг 2: Создаём vector store
+            vector_store = await self.client.beta.vector_stores.create(
+                name="Numerology Reference Book",
+                file_ids=[self.file_id]
+            )
+            self.vector_store_id = vector_store.id
+            logger.info(f"Vector store создан: {self.vector_store_id}")
+
+            # Ждём пока файл проиндексируется
+            logger.info("Ожидание индексации книги...")
+            import asyncio
+            max_wait = 60  # максимум 60 секунд
+            waited = 0
+            while waited < max_wait:
+                vs_status = await self.client.beta.vector_stores.retrieve(
+                    vector_store_id=self.vector_store_id
+                )
+                if vs_status.status == "completed":
+                    logger.info("Индексация завершена!")
+                    break
+                elif vs_status.status == "failed":
+                    raise Exception("Ошибка индексации книги в vector store")
+
+                await asyncio.sleep(2)
+                waited += 2
+                logger.debug(f"Индексация... ({waited}s / {max_wait}s)")
+
+            if waited >= max_wait:
+                logger.warning("Индексация заняла слишком много времени, продолжаем...")
+
+            # Шаг 3: Создаём ассистента с file_search
+            assistant = await self.client.beta.assistants.create(
+                name="Numerology Expert",
+                instructions=(
+                    "Ты профессиональный нумеролог с многолетним опытом. "
+                    "Используй прикреплённую справочную книгу по нумерологии для создания "
+                    "детальных, профессиональных отчётов. "
+                    "Опирайся на методы и значения из книги."
+                ),
+                model=self.model,
+                tools=[{"type": "file_search"}],
+                tool_resources={
+                    "file_search": {
+                        "vector_store_ids": [self.vector_store_id]
+                    }
+                }
+            )
+            self.assistant_id = assistant.id
+            logger.info(f"Ассистент создан: {self.assistant_id}")
+            logger.info("GPT клиент с книгой инициализирован успешно (Assistants API)")
+
         except FileNotFoundError as e:
             logger.warning(f"Книга не найдена: {e}")
             logger.warning("Клиент будет работать БЕЗ книги (fallback режим)")
-            self.book_text = None
+            self.assistant_id = None
         except Exception as e:
-            logger.error(f"Ошибка при инициализации книги: {e}")
+            logger.error(f"Ошибка при инициализации книги: {e}", exc_info=True)
             logger.warning("Клиент будет работать БЕЗ книги (fallback режим)")
-            self.book_text = None
-
-    def _build_context_with_book(self, user_prompt: str) -> str:
-        """
-        Построение контекста с книгой для user сообщения.
-
-        Args:
-            user_prompt: Промпт пользователя
-
-        Returns:
-            str: Полный контекст с книгой
-        """
-        if not self.book_text:
-            # Fallback: работаем без книги
-            return user_prompt
-
-        # Ограничиваем размер книги если нужно (опционально)
-        # Для GPT-4-turbo можно передать ~100k символов книги без проблем
-        max_book_chars = 100000
-        book_content = self.book_text[:max_book_chars]
-
-        if len(self.book_text) > max_book_chars:
-            logger.warning(
-                f"Книга обрезана: {len(self.book_text)} -> {max_book_chars} символов"
-            )
-
-        return f"""СПРАВОЧНАЯ КНИГА ПО НУМЕРОЛОГИИ:
-
-{book_content}
-
----
-
-ЗАДАНИЕ:
-
-{user_prompt}
-
-ВАЖНО: Используй информацию из справочной книги выше для создания отчёта.
-Опирайся на описанные в книге методы, значения чисел и техники расчёта.
-Создавай детальный, профессиональный отчёт на основе этих знаний."""
+            self.assistant_id = None
 
     async def generate_report(
         self,
@@ -210,83 +150,133 @@ class GPTClientWithBook:
         Raises:
             Exception: Если произошла ошибка при генерации
         """
-        try:
-            # Получаем системный промпт
-            system_prompt = get_system_prompt(style)
+        if not self.assistant_id:
+            raise Exception(
+                "Ассистент не инициализирован. Проверьте логи инициализации."
+            )
 
+        try:
             # Строим детальный промпт
             user_prompt = build_detailed_prompt(tariff, style, participants)
 
-            # Добавляем книгу в контекст
-            full_prompt = self._build_context_with_book(user_prompt)
+            # Добавляем инструкцию использовать книгу
+            full_prompt = f"""{user_prompt}
+
+ВАЖНО: Используй информацию из прикреплённой справочной книги по нумерологии.
+Опирайся на описанные в книге методы, значения чисел и техники расчёта.
+Создавай детальный, профессиональный отчёт на основе этих знаний."""
 
             logger.info(
-                f"Генерация отчёта: tariff={tariff}, style={style}, "
-                f"participants={len(participants)}, "
-                f"book_included={'Yes' if self.book_text else 'No'}"
+                f"Генерация отчёта через Assistants API: "
+                f"tariff={tariff}, style={style}, participants={len(participants)}"
             )
 
-            # Вызываем GPT-4
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": full_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=16000  # Для длинных отчётов
+            # Создаём thread
+            thread = await self.client.beta.threads.create()
+            logger.debug(f"Thread создан: {thread.id}")
+
+            # Отправляем сообщение
+            await self.client.beta.threads.messages.create(
+                thread_id=thread.id,
+                role="user",
+                content=full_prompt
             )
 
-            text = response.choices[0].message.content
-            tokens_used = response.usage.total_tokens
+            # Запускаем ассистента
+            run = await self.client.beta.threads.runs.create(
+                thread_id=thread.id,
+                assistant_id=self.assistant_id
+            )
+            logger.debug(f"Run создан: {run.id}")
+
+            # Ждём завершения
+            import asyncio
+            max_wait = 300  # 5 минут максимум
+            waited = 0
+            while waited < max_wait:
+                run_status = await self.client.beta.threads.runs.retrieve(
+                    thread_id=thread.id,
+                    run_id=run.id
+                )
+
+                if run_status.status == "completed":
+                    logger.info("Генерация завершена!")
+                    break
+                elif run_status.status in ["failed", "cancelled", "expired"]:
+                    error_msg = getattr(run_status, 'last_error', 'Unknown error')
+                    raise Exception(f"Run failed: {run_status.status}, error: {error_msg}")
+
+                await asyncio.sleep(3)
+                waited += 3
+
+                if waited % 15 == 0:  # Каждые 15 секунд логируем
+                    logger.debug(f"Генерация в процессе... ({waited}s, status: {run_status.status})")
+
+            if waited >= max_wait:
+                raise Exception("Timeout: генерация заняла слишком много времени")
+
+            # Получаем ответ
+            messages = await self.client.beta.threads.messages.list(
+                thread_id=thread.id,
+                order="desc",
+                limit=1
+            )
+
+            if not messages.data:
+                raise Exception("Не получен ответ от ассистента")
+
+            # Извлекаем текст из первого сообщения
+            message = messages.data[0]
+            text_parts = []
+            for content_block in message.content:
+                if content_block.type == "text":
+                    text_parts.append(content_block.text.value)
+
+            result_text = "\n\n".join(text_parts)
+
+            if not result_text.strip():
+                raise Exception("Получен пустой ответ от ассистента")
 
             logger.info(
-                f"Отчёт сгенерирован: {len(text)} символов, "
-                f"{tokens_used} токенов использовано"
+                f"Отчёт сгенерирован: {len(result_text)} символов, "
+                f"thread={thread.id}"
             )
 
-            return text
+            # Удаляем thread для экономии (опционально)
+            try:
+                await self.client.beta.threads.delete(thread_id=thread.id)
+                logger.debug(f"Thread удалён: {thread.id}")
+            except Exception as e:
+                logger.warning(f"Не удалось удалить thread: {e}")
+
+            return result_text
 
         except Exception as e:
             logger.error(f"Ошибка при генерации отчёта с книгой: {e}", exc_info=True)
             raise
 
-
-class OptimizedGPTClient(GPTClientWithBook):
-    """
-    Оптимизированный GPT клиент с кэшированием промпта книги.
-
-    Для продакшена: использует prompt caching (если поддерживается моделью)
-    для снижения стоимости повторных запросов с одной и той же книгой.
-    """
-
-    def __init__(self, api_key: str, book_path: str = "/app/books/numerology_book.pdf"):
+    async def cleanup(self):
         """
-        Инициализация оптимизированного клиента.
+        Очистка ресурсов при остановке приложения.
 
-        Args:
-            api_key: API ключ OpenAI
-            book_path: Путь к PDF книге
+        Удаляет assistant, vector store и файл из OpenAI.
         """
-        # Используем самую новую модель с поддержкой больших контекстов
-        super().__init__(
-            api_key=api_key,
-            book_path=book_path,
-            model="gpt-4-turbo-preview"  # или "gpt-4-1106-preview"
-        )
+        try:
+            if self.assistant_id:
+                await self.client.beta.assistants.delete(self.assistant_id)
+                logger.info(f"Ассистент удалён: {self.assistant_id}")
 
-    async def generate_report(
-        self,
-        tariff: str,
-        style: str,
-        participants: list
-    ) -> str:
-        """
-        Генерация отчёта с оптимизацией.
+            if self.vector_store_id:
+                await self.client.beta.vector_stores.delete(self.vector_store_id)
+                logger.info(f"Vector store удалён: {self.vector_store_id}")
 
-        В будущем здесь можно добавить:
-        - Кэширование на уровне OpenAI (prompt caching)
-        - Разбиение длинных книг на чанки
-        - Использование embeddings для релевантных секций
-        """
-        return await super().generate_report(tariff, style, participants)
+            if self.file_id:
+                await self.client.files.delete(self.file_id)
+                logger.info(f"Файл удалён: {self.file_id}")
+
+        except Exception as e:
+            logger.error(f"Ошибка при очистке ресурсов: {e}")
+
+
+# Alias для обратной совместимости
+OptimizedGPTClient = GPTAssistantWithBook
