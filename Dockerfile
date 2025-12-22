@@ -26,5 +26,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копирование кода приложения
 COPY . .
 
+# Создание директории для PDF книг (если не существует)
+RUN mkdir -p /app/books
+
 # Запуск приложения
 CMD ["python", "src/main.py"]

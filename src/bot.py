@@ -92,6 +92,13 @@ class NumerologBot:
         """Запуск бота."""
         logger.info("Запуск Telegram бота...")
 
+        # Инициализируем GPT клиента с книгой
+        if self.config.OPENAI_API_KEY:
+            from services.ai_service import initialize_gpt_with_book
+            await initialize_gpt_with_book(self.config.OPENAI_API_KEY)
+        else:
+            logger.warning("OPENAI_API_KEY не настроен - GPT с книгой не будет доступен")
+
         # Настраиваем меню команд
         await self._setup_bot_commands()
 
