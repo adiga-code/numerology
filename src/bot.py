@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 
 from config import Config
 from database import DatabaseManager
-from handlers import commands, order_flow
+from handlers import commands, order_flow, reviews
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class NumerologBot:
         self.dp.include_router(commands.router)
         self.dp.include_router(order_flow.router)
         self.dp.include_router(payments.router)
+        self.dp.include_router(reviews.router)
         logger.info("Обработчики зарегистрированы")
 
     def _setup_middlewares(self):
