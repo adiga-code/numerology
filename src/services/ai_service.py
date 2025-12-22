@@ -134,7 +134,10 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
 
         logger.info(f"Отчёт успешно отправлен для заказа {order.id}")
 
-        # TODO: Запланировать запрос отзыва через 1 час
+        # Запланировать запрос отзыва через 1 час
+        from handlers.reviews import request_review
+        import asyncio
+        asyncio.create_task(request_review(bot, order.id, user.telegram_id))
 
     except Exception as e:
         logger.error(f"Ошибка при генерации AI отчёта для заказа {order_id}: {e}")

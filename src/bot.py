@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 
 from config import Config
 from database import DatabaseManager
-from handlers import commands, order_flow
+from handlers import commands, order_flow, reviews
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class NumerologBot:
         self.dp.include_router(commands.router)
         self.dp.include_router(order_flow.router)
         self.dp.include_router(payments.router)
+        self.dp.include_router(reviews.router)
         logger.info("Обработчики зарегистрированы")
 
     def _setup_middlewares(self):
@@ -70,9 +71,30 @@ class NumerologBot:
         self.dp.update.middleware(DbSessionMiddleware(self.db_manager))
         logger.info("Middleware настроены")
 
+    async def _setup_bot_commands(self):
+        """Настройка меню команд бота."""
+        from aiogram.types import BotCommand
+
+        commands = [
+            BotCommand(command="start", description="🏠 Начало работы"),
+            BotCommand(command="new", description="➕ Создать новый заказ"),
+            BotCommand(command="history", description="📋 История заказов"),
+            BotCommand(command="download", description="📥 Скачать отчёт повторно"),
+            BotCommand(command="help", description="❓ Справка"),
+            BotCommand(command="support", description="💬 Поддержка"),
+            BotCommand(command="cancel", description="❌ Отменить текущий заказ"),
+        ]
+
+        await self.bot.set_my_commands(commands)
+        logger.info("Меню команд настроено")
+
     async def start(self):
         """Запуск бота."""
         logger.info("Запуск Telegram бота...")
+
+        # Настраиваем меню команд
+        await self._setup_bot_commands()
+
         await self.dp.start_polling(self.bot)
 
     async def stop(self):
