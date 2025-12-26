@@ -11,10 +11,11 @@ class Config(BaseSettings):
     BOT_TOKEN: str
 
     # AI Services
-    MANUS_API_KEY: str = ""
-    OPENAI_API_KEY: str = ""
-    OPENAI_ASSISTANT_ID: str = ""  # ID Assistant с базой знаний (опционально)
-    GEMINI_API_KEY: str = ""
+    N8N_WEBHOOK_URL: str = ""  # URL webhook в N8N для генерации отчётов
+    MANUS_API_KEY: str = ""  # DEPRECATED - не используется
+    OPENAI_API_KEY: str = ""  # DEPRECATED - не используется
+    OPENAI_ASSISTANT_ID: str = ""  # DEPRECATED - не используется
+    GEMINI_API_KEY: str = ""  # DEPRECATED - не используется
 
     # Payments
     YOOKASSA_SHOP_ID: str = ""
