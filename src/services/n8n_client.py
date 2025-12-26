@@ -52,6 +52,7 @@ class N8nClient:
         logger.info(
             f"Отправка запроса в N8N для заказа {order_id} "
             f"(тариф: {tariff}, стиль: {style})"
+            f"url: {self.webhook_url}"
         )
 
         try:
