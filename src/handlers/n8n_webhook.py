@@ -1,11 +1,9 @@
 """Webhook endpoints для приёма результатов от N8N."""
 import logging
-from fastapi import APIRouter, Request, HTTPException, Depends, Header
+from fastapi import APIRouter, Request, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.session import get_db
 from services.n8n_result_handler import handle_n8n_result, handle_n8n_error
 from config import Config
 
@@ -50,8 +48,7 @@ def verify_n8n_token(x_n8n_token: Optional[str] = Header(None)) -> None:
 async def receive_n8n_result(
     request: Request,
     request_data: N8nResultRequest,
-    session: AsyncSession = Depends(get_db),
-    _: None = Depends(verify_n8n_token)
+    x_n8n_token: Optional[str] = Header(None)
 ):
     """
     Endpoint для приёма результатов генерации от N8N.
@@ -75,63 +72,68 @@ async def receive_n8n_result(
     Args:
         request: FastAPI request
         request_data: Данные от N8N
-        session: Сессия БД
-        _: Проверка токена (dependency injection)
+        x_n8n_token: Токен из заголовка для проверки
 
     Returns:
         dict: Статус обработки
     """
-    # Получаем bot instance из app state
+    # Проверка токена
+    verify_n8n_token(x_n8n_token)
+
+    # Получаем зависимости из app state
     bot = request.app.state.bot
+    db_manager = request.app.state.db
 
     logger.info(
         f"Получен результат от N8N для заказа {request_data.order_id}, "
         f"статус: {request_data.status}"
     )
 
-    try:
-        if request_data.status == "success":
-            if not request_data.text:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Missing 'text' field for success status"
+    # Получаем сессию БД
+    async with db_manager.get_session() as session:
+        try:
+            if request_data.status == "success":
+                if not request_data.text:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Missing 'text' field for success status"
+                    )
+
+                # Обрабатываем успешный результат
+                await handle_n8n_result(
+                    order_id=request_data.order_id,
+                    text=request_data.text,
+                    session=session,
+                    bot=bot
                 )
 
-            # Обрабатываем успешный результат
-            await handle_n8n_result(
-                order_id=request_data.order_id,
-                text=request_data.text,
-                session=session,
-                bot=bot
-            )
+                return {
+                    "status": "ok",
+                    "message": f"Report processed for order {request_data.order_id}"
+                }
 
-            return {
-                "status": "ok",
-                "message": f"Report processed for order {request_data.order_id}"
-            }
+            elif request_data.status == "failed":
+                error_msg = request_data.error or "Unknown error from N8N"
 
-        elif request_data.status == "failed":
-            error_msg = request_data.error or "Unknown error from N8N"
+                # Обрабатываем ошибку
+                await handle_n8n_error(
+                    order_id=request_data.order_id,
+                    error_message=error_msg,
+                    session=session,
+                    bot=bot
+                )
 
-            # Обрабатываем ошибку
-            await handle_n8n_error(
-                order_id=request_data.order_id,
-                error_message=error_msg,
-                session=session,
-                bot=bot
-            )
+                return {
+                    "status": "ok",
+                    "message": f"Error processed for order {request_data.order_id}"
+                }
 
-            return {
-                "status": "ok",
-                "message": f"Error processed for order {request_data.order_id}"
-            }
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown status: {request_data.status}"
+                )
 
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown status: {request_data.status}"
-            )
-
-    except Exception as e:
-        logger.error(f"Ошибка при обработке результата N8N: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error(f"Ошибка при обработке результата N8N: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
