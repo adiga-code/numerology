@@ -337,11 +337,23 @@ async def process_style(callback: CallbackQuery, state: FSMContext, session: Asy
         "shamanic": "Шаманский"
     }
 
-    # Получаем пользователя
+    # Получаем или создаём пользователя
     result = await session.execute(
         select(User).where(User.telegram_id == callback.from_user.id)
     )
-    user = result.scalar_one()
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Создаём нового пользователя
+        user = User(
+            telegram_id=callback.from_user.id,
+            username=callback.from_user.username,
+            first_name=callback.from_user.first_name,
+            last_name=callback.from_user.last_name
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
 
     # Создаём заказ
     tariff = TariffType(data["tariff"])
