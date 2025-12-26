@@ -26,11 +26,14 @@ async def main():
     await db_manager.init_db()
     logger.info("База данных инициализирована")
 
+    # Создание бота
+    bot_instance = NumerologBot(config, db_manager)
+
     # Создание FastAPI приложения
     fastapi_app = create_app(config, db_manager)
 
-    # Создание бота
-    bot = NumerologBot(config, db_manager)
+    # Сохраняем bot instance для доступа из webhooks
+    fastapi_app.state.bot = bot_instance.bot
 
     # Запуск FastAPI в отдельном процессе
     fastapi_config = uvicorn.Config(
@@ -44,11 +47,11 @@ async def main():
     async def run_bot():
         """Запуск бота."""
         try:
-            await bot.start()
+            await bot_instance.start()
         except Exception as e:
             logger.error(f"Ошибка в боте: {e}")
         finally:
-            await bot.stop()
+            await bot_instance.stop()
             await db_manager.close()
 
     async def run_fastapi():

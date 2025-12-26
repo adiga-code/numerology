@@ -41,9 +41,11 @@ def create_app(config: Config, db_manager: DatabaseManager) -> FastAPI:
     # Импортируем роутеры webhook
     from webhooks.manus import router as manus_router
     from webhooks.yookassa import router as yookassa_router
+    from handlers.n8n_webhook import router as n8n_router
 
     app.include_router(manus_router, prefix="/webhook/manus", tags=["manus"])
     app.include_router(yookassa_router, prefix="/webhook/yookassa", tags=["yookassa"])
+    app.include_router(n8n_router)  # N8N роутер уже имеет prefix /webhook/n8n
 
     @app.get("/health")
     async def health_check():

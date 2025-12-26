@@ -8,8 +8,7 @@ from aiogram import Bot
 from database.models import Order, OrderParticipant, AiLog
 from utils.enums import OrderStatus, AiProvider, AiLogStatus
 from services.n8n_client import N8nClient
-from services.report_generator import generate_report
-from services.pdf_generator import generate_pdf
+from services.report_generator import start_report_generation
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
     """
-    Запуск генерации AI отчёта после оплаты.
+    Запуск генерации AI отчёта после оплаты (асинхронно через N8N).
 
     Args:
         order_id: ID заказа
@@ -64,7 +63,14 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         if not config.N8N_WEBHOOK_URL:
             raise Exception("N8N_WEBHOOK_URL не настроен в .env")
 
-        n8n_client = N8nClient(webhook_url=config.N8N_WEBHOOK_URL)
+        # Формируем callback URL для N8N
+        callback_url = f"{config.WEBHOOK_DOMAIN}/webhook/n8n/result"
+
+        n8n_client = N8nClient(
+            webhook_url=config.N8N_WEBHOOK_URL,
+            callback_url=callback_url,
+            secret_token=config.N8N_SECRET_TOKEN
+        )
 
         # Создаём AI лог
         ai_log = AiLog(
@@ -75,9 +81,9 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         session.add(ai_log)
         await session.commit()
 
-        # Генерируем отчёт через N8N
+        # Запускаем генерацию через N8N (асинхронно)
         logger.info(f"Запуск AI генерации для заказа {order.id}")
-        result_text = await generate_report(
+        await start_report_generation(
             n8n_client=n8n_client,
             order_id=order.id,
             tariff=order.tariff.value,
@@ -85,63 +91,40 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
             participants=participants_data
         )
 
-        # Обновляем AI лог
-        ai_log.status = AiLogStatus.SUCCESS
-        await session.commit()
-
-        # Генерируем PDF
-        logger.info(f"Генерация PDF для заказа {order.id}")
-        pdf_path = await generate_pdf(
-            order=order,
-            participants=participants,
-            content=result_text
-        )
-
-        # Обновляем заказ
-        order.status = OrderStatus.COMPLETED
-        order.pdf_url = pdf_path
-        order.completed_at = datetime.utcnow()
-        await session.commit()
-
-        # Отправляем PDF пользователю
-        from aiogram.types import FSInputFile
-
-        await bot.send_document(
+        # Уведомляем пользователя что отчёт генерируется
+        await bot.send_message(
             chat_id=user.telegram_id,
-            document=FSInputFile(pdf_path),
-            caption=(
-                f"✅ <b>Ваш нумерологический отчёт готов!</b>\n\n"
+            text=(
+                f"⏳ <b>Генерация отчёта началась</b>\n\n"
                 f"Заказ: <code>{order.order_uuid}</code>\n"
                 f"Тариф: {order.tariff.value}\n"
                 f"Стиль: {order.style.value}\n\n"
-                f"Приятного чтения! 🔮"
+                f"Отчёт будет готов через несколько минут.\n"
+                f"Мы отправим его автоматически! 🔮"
             ),
             parse_mode="HTML"
         )
 
-        logger.info(f"Отчёт успешно отправлен для заказа {order.id}")
-
-        # Запланировать запрос отзыва через 1 час
-        from handlers.reviews import request_review
-        import asyncio
-        asyncio.create_task(request_review(bot, order.id, user.telegram_id))
+        logger.info(f"Генерация запущена для заказа {order.id}, ожидаем результат от N8N")
 
     except Exception as e:
-        logger.error(f"Ошибка при генерации AI отчёта для заказа {order_id}: {e}")
+        logger.error(f"Ошибка при запуске генерации для заказа {order_id}: {e}")
 
         # Обновляем статус на failed
         order.status = OrderStatus.FAILED
 
         # Обновляем AI лог
-        ai_log.status = AiLogStatus.FAILED
-        ai_log.error_message = str(e)
+        if 'ai_log' in locals():
+            ai_log.status = AiLogStatus.FAILED
+            ai_log.error_message = str(e)
+
         await session.commit()
 
         # Уведомляем пользователя
         await bot.send_message(
             chat_id=user.telegram_id,
             text=(
-                f"❌ <b>Ошибка при генерации отчёта</b>\n\n"
+                f"❌ <b>Ошибка при запуске генерации отчёта</b>\n\n"
                 f"Заказ: <code>{order.order_uuid}</code>\n\n"
                 f"Произошла ошибка: {str(e)}\n\n"
                 f"Свяжитесь с поддержкой для решения проблемы."

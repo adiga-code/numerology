@@ -9,26 +9,33 @@ logger = logging.getLogger(__name__)
 class N8nClient:
     """Клиент для отправки запросов в N8N webhook."""
 
-    def __init__(self, webhook_url: str, timeout: int = 300):
+    def __init__(self, webhook_url: str, callback_url: str, secret_token: str, timeout: int = 30):
         """
         Инициализация N8N клиента.
 
         Args:
             webhook_url: URL webhook в N8N
-            timeout: Таймаут запроса в секундах (по умолчанию 300 = 5 минут)
+            callback_url: URL для callback от N8N с результатом
+            secret_token: Секретный токен для проверки callback
+            timeout: Таймаут запроса в секундах (по умолчанию 30)
         """
         self.webhook_url = webhook_url
+        self.callback_url = callback_url
+        self.secret_token = secret_token
         self.timeout = timeout
 
-    async def generate_report(
+    async def start_generation(
         self,
         prompt: str,
         order_id: int,
         tariff: str,
         style: str
-    ) -> str:
+    ) -> None:
         """
-        Отправка запроса на генерацию отчёта в N8N.
+        Отправка запроса на генерацию отчёта в N8N (асинхронно).
+
+        N8N получит запрос, запустит генерацию в фоне и вернёт результат
+        через callback на callback_url.
 
         Args:
             prompt: Готовый промпт для генерации
@@ -36,17 +43,16 @@ class N8nClient:
             tariff: Тариф (quick/deep/pair/family)
             style: Стиль (analytical/shamanic)
 
-        Returns:
-            str: Сгенерированный текст отчёта
-
         Raises:
-            Exception: При ошибке генерации или таймауте
+            Exception: При ошибке отправки запроса
         """
         payload = {
             "prompt": prompt,
             "order_id": order_id,
             "tariff": tariff,
-            "style": style
+            "style": style,
+            "callback_url": self.callback_url,
+            "secret_token": self.secret_token
         }
 
         logger.info(
@@ -61,43 +67,25 @@ class N8nClient:
                     json=payload
                 )
 
-                # Проверяем статус ответа
+                # Проверяем что N8N принял запрос
                 response.raise_for_status()
 
-                # Парсим JSON ответ
+                # Парсим ответ
                 result = response.json()
 
-                # Логируем полный ответ от N8N для дебага
-                logger.info(f"Ответ от N8N для заказа {order_id}: {result}")
+                # Логируем ответ от N8N
+                logger.info(f"N8N принял запрос для заказа {order_id}: {result}")
 
-                # Валидация ответа
-                if not isinstance(result, dict):
-                    raise ValueError(f"Некорректный формат ответа от N8N: {type(result)}")
-
-                if result.get("status") != "success":
-                    error_msg = result.get("error", "Unknown error")
-                    logger.error(f"N8N вернул некорректный статус. Полный ответ: {result}")
-                    raise Exception(f"N8N вернул ошибку: {error_msg}")
-
-                if "text" not in result:
-                    raise ValueError("N8N не вернул поле 'text' в ответе")
-
-                text = result["text"]
-
-                # Логируем статистику
-                char_count = len(text)
-                word_count = len(text.split())
-                estimated_pages = char_count / 2800
-
-                logger.info(
-                    f"N8N отчёт получен для заказа {order_id}: "
-                    f"{char_count} символов, {word_count} слов, ~{estimated_pages:.1f} страниц"
-                )
-
-                return text
+                # Проверяем что workflow запустился
+                if "message" in result and "started" in result["message"].lower():
+                    logger.info(f"N8N workflow запущен для заказа {order_id}")
+                else:
+                    logger.warning(
+                        f"Неожиданный ответ от N8N для заказа {order_id}: {result}"
+                    )
 
         except httpx.TimeoutException:
-            logger.error(f"Таймаут при обращении к N8N для заказа {order_id}")
+            logger.error(f"Таймаут при отправке запроса в N8N для заказа {order_id}")
             raise Exception(
                 "Превышено время ожидания ответа от сервиса генерации. "
                 "Попробуйте позже."
@@ -114,5 +102,5 @@ class N8nClient:
             )
 
         except Exception as e:
-            logger.error(f"Ошибка при генерации через N8N для заказа {order_id}: {e}")
-            raise Exception(f"Произошла ошибка при генерации отчёта: {str(e)}")
+            logger.error(f"Ошибка при отправке запроса в N8N для заказа {order_id}: {e}")
+            raise Exception(f"Произошла ошибка при запуске генерации: {str(e)}")
