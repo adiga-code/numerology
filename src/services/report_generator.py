@@ -8,15 +8,17 @@ from services.n8n_client import N8nClient
 logger = logging.getLogger(__name__)
 
 
-async def generate_report(
+async def start_report_generation(
     n8n_client: N8nClient,
     order_id: int,
     tariff: str,
     style: str,
     participants: List[Dict[str, Any]]
-) -> str:
+) -> None:
     """
-    Генерация нумерологического отчёта через N8N.
+    Запуск генерации нумерологического отчёта через N8N (асинхронно).
+
+    N8N получит запрос и вернёт результат через callback webhook.
 
     Args:
         n8n_client: Клиент N8N
@@ -25,11 +27,8 @@ async def generate_report(
         style: Стиль отчёта ('analytical', 'shamanic')
         participants: Список участников с данными
 
-    Returns:
-        str: Сгенерированный текст отчёта
-
     Raises:
-        Exception: При ошибке генерации
+        Exception: При ошибке отправки запроса
     """
     # Строим промпт
     prompt = build_numerology_prompt(tariff, style, participants)
@@ -42,16 +41,15 @@ async def generate_report(
 
     # Отправляем в N8N для генерации
     try:
-        text = await n8n_client.generate_report(
+        await n8n_client.start_generation(
             prompt=prompt,
             order_id=order_id,
             tariff=tariff,
             style=style
         )
 
-        logger.info(f"Отчёт успешно сгенерирован для заказа {order_id}")
-        return text
+        logger.info(f"Генерация запущена для заказа {order_id}, ожидаем callback от N8N")
 
     except Exception as e:
-        logger.error(f"Ошибка генерации отчёта для заказа {order_id}: {e}")
+        logger.error(f"Ошибка запуска генерации для заказа {order_id}: {e}")
         raise
