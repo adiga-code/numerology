@@ -68,12 +68,16 @@ class N8nClient:
                 # Парсим JSON ответ
                 result = response.json()
 
+                # Логируем полный ответ от N8N для дебага
+                logger.info(f"Ответ от N8N для заказа {order_id}: {result}")
+
                 # Валидация ответа
                 if not isinstance(result, dict):
                     raise ValueError(f"Некорректный формат ответа от N8N: {type(result)}")
 
                 if result.get("status") != "success":
                     error_msg = result.get("error", "Unknown error")
+                    logger.error(f"N8N вернул некорректный статус. Полный ответ: {result}")
                     raise Exception(f"N8N вернул ошибку: {error_msg}")
 
                 if "text" not in result:
