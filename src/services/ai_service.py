@@ -7,8 +7,8 @@ from aiogram import Bot
 
 from database.models import Order, OrderParticipant, AiLog
 from utils.enums import OrderStatus, AiProvider, AiLogStatus
-from services.manus import ManusClient, build_numerology_prompt
-from services.ai_fallback import GPT4Client, generate_with_fallback
+from services.n8n_client import N8nClient
+from services.report_generator import generate_report
 from services.pdf_generator import generate_pdf
 from config import Config
 
@@ -47,7 +47,7 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         order.status = OrderStatus.PROCESSING
         await session.commit()
 
-        # Строим промпт
+        # Подготавливаем данные участников
         participants_data = [
             {
                 "full_name": p.full_name,
@@ -58,53 +58,34 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
             for p in participants
         ]
 
-        prompt = build_numerology_prompt(
-            tariff=order.tariff.value,
-            style=order.style.value,
-            participants=participants_data
-        )
-
-        # Логирование промпта для дебага
-        logger.debug(f"Промпт для заказа {order.id} (первые 500 символов): {prompt[:500]}...")
-
-        # Инициализируем клиенты
+        # Инициализируем N8N клиент
         config = Config()
 
-        # Проверяем наличие ключей и инициализируем только доступные клиенты
-        manus_client = None
-        if config.MANUS_API_KEY:
-            manus_client = ManusClient(config.MANUS_API_KEY, config.WEBHOOK_DOMAIN)
+        if not config.N8N_WEBHOOK_URL:
+            raise Exception("N8N_WEBHOOK_URL не настроен в .env")
 
-        gpt4_client = None
-        if config.OPENAI_API_KEY:
-            gpt4_client = GPT4Client(
-                api_key=config.OPENAI_API_KEY,
-                assistant_id=config.OPENAI_ASSISTANT_ID or None
-            )
-
-        if not gpt4_client and not manus_client:
-            raise Exception("Не настроен ни один AI провайдер. Добавьте OPENAI_API_KEY или MANUS_API_KEY в .env")
+        n8n_client = N8nClient(webhook_url=config.N8N_WEBHOOK_URL)
 
         # Создаём AI лог
         ai_log = AiLog(
             order_id=order.id,
-            provider=AiProvider.GPT4 if gpt4_client else AiProvider.MANUS,
+            provider=AiProvider.GPT4,  # Используем GPT4 как провайдер (N8N использует GPT)
             status=AiLogStatus.PENDING
         )
         session.add(ai_log)
         await session.commit()
 
-        # Генерируем отчёт
+        # Генерируем отчёт через N8N
         logger.info(f"Запуск AI генерации для заказа {order.id}")
-        result_text, provider = await generate_with_fallback(
-            prompt=prompt,
-            manus_client=manus_client,
-            gpt4_client=gpt4_client,
-            order_id=order.id
+        result_text = await generate_report(
+            n8n_client=n8n_client,
+            order_id=order.id,
+            tariff=order.tariff.value,
+            style=order.style.value,
+            participants=participants_data
         )
 
         # Обновляем AI лог
-        ai_log.provider = AiProvider(provider)
         ai_log.status = AiLogStatus.SUCCESS
         await session.commit()
 
@@ -162,8 +143,8 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
             text=(
                 f"❌ <b>Ошибка при генерации отчёта</b>\n\n"
                 f"Заказ: <code>{order.order_uuid}</code>\n\n"
-                f"Мы автоматически вернём средства.\n"
-                f"Приносим извинения за неудобства."
+                f"Произошла ошибка: {str(e)}\n\n"
+                f"Свяжитесь с поддержкой для решения проблемы."
             ),
             parse_mode="HTML"
         )
