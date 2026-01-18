@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from telegram import Bot
+from aiogram import Bot
 
 from services.n8n_client import N8nClient
 from services.n8n_result_handler import handle_n8n_result, handle_n8n_error
