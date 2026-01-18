@@ -12,6 +12,7 @@ class Config(BaseSettings):
 
     # AI Services
     N8N_WEBHOOK_URL: str = ""  # URL webhook в N8N для генерации отчётов
+    N8N_STATUS_URL: str = ""  # URL для проверки статуса таска в N8N
     N8N_SECRET_TOKEN: str = ""  # Секретный токен для проверки запросов от N8N
     MANUS_API_KEY: str = ""  # DEPRECATED - не используется
     OPENAI_API_KEY: str = ""  # DEPRECATED - не используется

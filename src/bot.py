@@ -66,6 +66,7 @@ class NumerologBot:
             ) -> Any:
                 async with self.db_manager.async_session() as session:
                     data["session"] = session
+                    data["db_manager"] = self.db_manager
                     return await handler(event, data)
 
         self.dp.update.middleware(DbSessionMiddleware(self.db_manager))

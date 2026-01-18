@@ -130,13 +130,14 @@ async def process_pre_checkout_query(pre_checkout_query: PreCheckoutQuery, sessi
 
 
 @router.message(F.successful_payment)
-async def process_successful_payment(message: Message, session: AsyncSession):
+async def process_successful_payment(message: Message, session: AsyncSession, db_manager):
     """
     Обработка успешной оплаты через Telegram Stars.
 
     Args:
         message: Сообщение с successful_payment
         session: Сессия БД
+        db_manager: Менеджер базы данных
     """
     payment_info = message.successful_payment
     payload = payment_info.invoice_payload
@@ -175,7 +176,7 @@ async def process_successful_payment(message: Message, session: AsyncSession):
 
     # TODO: Запустить генерацию AI отчёта
     from services.ai_service import start_ai_generation
-    await start_ai_generation(order.id, session, message.bot)
+    await start_ai_generation(order.id, session, message.bot, db_manager)
 
 
 @router.callback_query(F.data.startswith("pay_yookassa:"))
@@ -216,13 +217,14 @@ async def process_yookassa_payment(callback: CallbackQuery, session: AsyncSessio
 
 
 @router.callback_query(F.data.startswith("pay_test:"))
-async def process_test_payment(callback: CallbackQuery, session: AsyncSession):
+async def process_test_payment(callback: CallbackQuery, session: AsyncSession, db_manager):
     """
     Тестовый режим - генерация отчёта без оплаты.
 
     Args:
         callback: Callback от inline кнопки
         session: Сессия БД
+        db_manager: Менеджер базы данных
     """
     order_uuid = callback.data.split(":")[1]
 
@@ -265,4 +267,4 @@ async def process_test_payment(callback: CallbackQuery, session: AsyncSession):
 
     # Запускаем генерацию AI отчёта
     from services.ai_service import start_ai_generation
-    await start_ai_generation(order.id, session, callback.bot)
+    await start_ai_generation(order.id, session, callback.bot, db_manager)
