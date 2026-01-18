@@ -126,13 +126,8 @@ class N8nClient:
         Raises:
             Exception: При ошибке запроса
         """
-        # Формируем URL для проверки статуса
-        # Ожидается что status_url содержит плейсхолдер {task_id} или URL без task_id
-        if "{task_id}" in self.status_url:
-            url = self.status_url.replace("{task_id}", task_id)
-        else:
-            # Если плейсхолдера нет, добавляем task_id в конец URL
-            url = f"{self.status_url.rstrip('/')}/{task_id}"
+        # Формируем URL для проверки статуса с query параметром
+        url = f"{self.status_url}?task_id={task_id}"
 
         logger.info(f"Проверка статуса таска {task_id} по URL: {url}")
 
