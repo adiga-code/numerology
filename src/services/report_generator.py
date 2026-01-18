@@ -14,11 +14,11 @@ async def start_report_generation(
     tariff: str,
     style: str,
     participants: List[Dict[str, Any]]
-) -> None:
+) -> str:
     """
     Запуск генерации нумерологического отчёта через N8N (асинхронно).
 
-    N8N получит запрос и вернёт результат через callback webhook.
+    N8N получит запрос, создаст таск и вернёт task_id для последующего polling.
 
     Args:
         n8n_client: Клиент N8N
@@ -26,6 +26,9 @@ async def start_report_generation(
         tariff: Тип тарифа ('quick', 'deep', 'pair', 'family')
         style: Стиль отчёта ('analytical', 'shamanic')
         participants: Список участников с данными
+
+    Returns:
+        task_id: ID созданного таска в N8N
 
     Raises:
         Exception: При ошибке отправки запроса
@@ -41,14 +44,19 @@ async def start_report_generation(
 
     # Отправляем в N8N для генерации
     try:
-        await n8n_client.start_generation(
+        task_id = await n8n_client.start_generation(
             prompt=prompt,
             order_id=order_id,
             tariff=tariff,
             style=style
         )
 
-        logger.info(f"Генерация запущена для заказа {order_id}, ожидаем callback от N8N")
+        logger.info(
+            f"Генерация запущена для заказа {order_id}, "
+            f"получен task_id: {task_id}"
+        )
+
+        return task_id
 
     except Exception as e:
         logger.error(f"Ошибка запуска генерации для заказа {order_id}: {e}")

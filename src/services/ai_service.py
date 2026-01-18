@@ -14,7 +14,7 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 
-async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
+async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot, db_manager=None):
     """
     Запуск генерации AI отчёта после оплаты (асинхронно через N8N).
 
@@ -63,12 +63,12 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
         if not config.N8N_WEBHOOK_URL:
             raise Exception("N8N_WEBHOOK_URL не настроен в .env")
 
-        # Формируем callback URL для N8N
-        callback_url = f"{config.WEBHOOK_DOMAIN}/webhook/n8n/result"
+        if not config.N8N_STATUS_URL:
+            raise Exception("N8N_STATUS_URL не настроен в .env")
 
         n8n_client = N8nClient(
             webhook_url=config.N8N_WEBHOOK_URL,
-            callback_url=callback_url,
+            status_url=config.N8N_STATUS_URL,
             secret_token=config.N8N_SECRET_TOKEN
         )
 
@@ -83,7 +83,7 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
 
         # Запускаем генерацию через N8N (асинхронно)
         logger.info(f"Запуск AI генерации для заказа {order.id}")
-        await start_report_generation(
+        task_id = await start_report_generation(
             n8n_client=n8n_client,
             order_id=order.id,
             tariff=order.tariff.value,
@@ -105,7 +105,33 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot):
             parse_mode="HTML"
         )
 
-        logger.info(f"Генерация запущена для заказа {order.id}, ожидаем результат от N8N")
+        # Запускаем polling для проверки статуса таска
+        from services.task_polling import poll_task_status
+        import asyncio
+
+        logger.info(f"Запуск polling для таска {task_id} (заказ {order.id})")
+
+        # Получаем db_manager (если не передан, создаем новый)
+        if db_manager is None:
+            from database import DatabaseManager
+            db_manager = DatabaseManager(config.DATABASE_URL)
+
+        asyncio.create_task(
+            poll_task_status(
+                task_id=task_id,
+                order_id=order.id,
+                n8n_client=n8n_client,
+                db_manager=db_manager,
+                bot=bot,
+                poll_interval=30,  # Проверка каждые 30 секунд
+                timeout_minutes=20  # Таймаут через 20 минут
+            )
+        )
+
+        logger.info(
+            f"Генерация запущена для заказа {order.id}, "
+            f"task_id: {task_id}, запущен polling"
+        )
 
     except Exception as e:
         logger.error(f"Ошибка при запуске генерации для заказа {order_id}: {e}")
