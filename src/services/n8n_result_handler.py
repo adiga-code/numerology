@@ -87,16 +87,17 @@ async def handle_n8n_result(
         order.pdf_url = pdf_path
         order.completed_at = datetime.utcnow()
         await session.commit()
-
+        tarifs = {'quick': '🌟 Быстрый взгляд', 'deep': '🔍 Глубокий анализ', 'pair': '💑 Парный Оракул', 'family': '👨‍👩‍👧‍👦 Семейный Оракул'}
+        styles = {'analytical': '🧠 Аналитический', 'shamanic': '🔮 Шаманский'}
         # Отправляем PDF пользователю
         await bot.send_document(
             chat_id=user.telegram_id,
             document=FSInputFile(pdf_path),
             caption=(
                 f"✅ <b>Ваш нумерологический отчёт готов!</b>\n\n"
-                f"Заказ: <code>{order.order_uuid}</code>\n"
-                f"Тариф: {order.tariff.value}\n"
-                f"Стиль: {order.style.value}\n\n"
+                f"Номер заказа: <code>{order.order_uuid}</code>\n"
+                f"Тариф: {tarifs[order.tariff.value]}\n"
+                f"Стиль: {styles[order.style.value]}\n\n"
                 f"Приятного чтения! 🔮"
             ),
             parse_mode="HTML"
