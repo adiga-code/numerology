@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import List
 from uuid import uuid4
 
-from sqlalchemy import String, Integer, BigInteger, Text, DECIMAL, DateTime, Date, Time, ForeignKey, Enum as SQLEnum
+from sqlalchemy import String, Integer, BigInteger, Text, DECIMAL, DateTime, Date, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from utils.enums import (
@@ -89,8 +89,6 @@ class OrderParticipant(Base):
     # Данные участника
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     birth_date: Mapped[datetime] = mapped_column(Date, nullable=False)
-    birth_time: Mapped[datetime | None] = mapped_column(Time)
-    birth_place: Mapped[str | None] = mapped_column(String(255))
 
     # Тип участника
     participant_type: Mapped[ParticipantType] = mapped_column(SQLEnum(ParticipantType), default=ParticipantType.MAIN)

@@ -11,8 +11,6 @@ class OrderFlow(StatesGroup):
     # Сбор данных для участников
     entering_full_name = State()
     entering_birth_date = State()
-    entering_birth_time = State()
-    entering_birth_place = State()
 
     # Для парного и семейного тарифа
     asking_partner_data = State()

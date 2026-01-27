@@ -45,13 +45,6 @@ def get_style_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def get_skip_keyboard() -> InlineKeyboardMarkup:
-    """Создание клавиатуры с кнопкой 'Пропустить'."""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⏭ Пропустить", callback_data="skip")],
-    ])
-
-
 @router.message(Command("new"))
 async def start_order(message: Message, state: FSMContext):
     """
@@ -199,91 +192,9 @@ async def process_birth_date(message: Message, state: FSMContext):
     participants_data[data["current_participant"]]["birth_date"] = message.text
 
     await state.update_data(participants_data=participants_data)
-    await state.set_state(OrderFlow.entering_birth_time)
 
-    await message.answer(
-        f"✅ Дата рождения: {message.text}\n\n"
-        "Введите время рождения в формате ЧЧ:ММ\n"
-        "Например: 14:30",
-        reply_markup=get_skip_keyboard()
-    )
-
-
-@router.message(OrderFlow.entering_birth_time, F.text)
-async def process_birth_time(message: Message, state: FSMContext):
-    """
-    Обработка ввода времени рождения.
-
-    Args:
-        message: Сообщение от пользователя
-        state: FSM контекст
-    """
-    try:
-        birth_time = datetime.strptime(message.text, "%H:%M").time()
-    except ValueError:
-        await message.answer("❌ Неверный формат времени. Используйте ЧЧ:ММ, например: 14:30")
-        return
-
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    # Сохраняем как строку для JSON сериализации в Redis
-    participants_data[data["current_participant"]]["birth_time"] = message.text
-
-    await state.update_data(participants_data=participants_data)
-    await state.set_state(OrderFlow.entering_birth_place)
-
-    await message.answer(
-        f"✅ Время рождения: {message.text}\n\n"
-        "Введите место рождения (город):",
-        reply_markup=get_skip_keyboard()
-    )
-
-
-@router.callback_query(OrderFlow.entering_birth_time, F.data == "skip")
-async def skip_birth_time(callback: CallbackQuery, state: FSMContext):
-    """Пропуск времени рождения."""
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_time"] = None
-
-    await state.update_data(participants_data=participants_data)
-    await state.set_state(OrderFlow.entering_birth_place)
-
-    await callback.message.edit_text(
-        "⏭ Время рождения пропущено\n\n"
-        "Введите место рождения (город):",
-        reply_markup=get_skip_keyboard()
-    )
-    await callback.answer()
-
-
-@router.message(OrderFlow.entering_birth_place, F.text)
-async def process_birth_place(message: Message, state: FSMContext):
-    """
-    Обработка ввода места рождения.
-
-    Args:
-        message: Сообщение от пользователя
-        state: FSM контекст
-    """
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_place"] = message.text
-
-    await state.update_data(participants_data=participants_data)
+    await message.answer(f"✅ Дата рождения: {message.text}")
     await check_next_participant(message, state)
-
-
-@router.callback_query(OrderFlow.entering_birth_place, F.data == "skip")
-async def skip_birth_place(callback: CallbackQuery, state: FSMContext):
-    """Пропуск места рождения."""
-    data = await state.get_data()
-    participants_data = data["participants_data"]
-    participants_data[data["current_participant"]]["birth_place"] = None
-
-    await state.update_data(participants_data=participants_data)
-    await check_next_participant(callback.message, state)
-    await callback.answer()
 
 
 async def check_next_participant(message: Message, state: FSMContext):
@@ -374,18 +285,13 @@ async def process_style(callback: CallbackQuery, state: FSMContext, session: Asy
             ParticipantType.PARTNER if data["tariff"] == "pair" else ParticipantType.FAMILY_MEMBER
         )
 
-        # Конвертируем строки обратно в date/time объекты
+        # Конвертируем строку обратно в date объект
         birth_date = datetime.strptime(participant_data["birth_date"], "%d.%m.%Y").date()
-        birth_time = None
-        if participant_data.get("birth_time"):
-            birth_time = datetime.strptime(participant_data["birth_time"], "%H:%M").time()
 
         participant = OrderParticipant(
             order_id=order.id,
             full_name=participant_data["full_name"],
             birth_date=birth_date,
-            birth_time=birth_time,
-            birth_place=participant_data.get("birth_place"),
             participant_type=participant_type
         )
         session.add(participant)

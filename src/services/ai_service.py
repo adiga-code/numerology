@@ -51,8 +51,6 @@ async def start_ai_generation(order_id: int, session: AsyncSession, bot: Bot, db
             {
                 "full_name": p.full_name,
                 "birth_date": p.birth_date,  # Передаем datetime объект
-                "birth_time": p.birth_time,  # Передаем datetime объект или None
-                "birth_place": p.birth_place
             }
             for p in participants
         ]
