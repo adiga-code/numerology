@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, date, time
+from datetime import datetime, date
 from typing import Optional, List
 from utils import *
 
@@ -29,8 +29,6 @@ class OrderParticipant:
     order_id: int
     full_name: str
     birth_date: date
-    birth_time: Optional[time]
-    birth_place: Optional[str]
     participant_type: ParticipantType
 
 

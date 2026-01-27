@@ -61,8 +61,6 @@ async def generate_pdf(order, participants, content: str) -> str:
                 {
                     "full_name": p.full_name,
                     "birth_date": p.birth_date.strftime("%d.%m.%Y"),
-                    "birth_time": p.birth_time.strftime("%H:%M") if p.birth_time else "не указано",
-                    "birth_place": p.birth_place or "не указано"
                 }
                 for p in participants
             ],
